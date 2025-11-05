@@ -1,0 +1,20 @@
+{
+  "name": "express-blog",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "front-matter": "^4.0.2",
+    "fs-extra": "^11.3.0",
+    "markdown-it": "^14.1.0"
+  }
+}

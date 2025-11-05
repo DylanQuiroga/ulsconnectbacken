@@ -1,0 +1,5 @@
+runtime: node
+startCommand: node app.js
+buildCommand: npm install
+port: 8080
+memory: 512mb
