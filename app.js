@@ -27,6 +27,9 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 // Body parsing for form submissions
 app.use(express.urlencoded({ extended: true }));
 
+// JSON body parser for APIs
+app.use(express.json());
+
 // Basic session configuration (for demo). In production, use secure store & env secret
 app.use(session({
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
@@ -41,6 +44,22 @@ try {
     app.use('/', authRouter);
 } catch (err) {
     // If the routes file doesn't exist yet, ignore so app still runs
+}
+
+// Mount activity routes
+try {
+    const activityRouter = require(path.join(__dirname, 'routes', 'activityRoutes'));
+    app.use('/api/activities', activityRouter);
+} catch (err) {
+    console.warn('Activity routes not available:', err && err.message ? err.message : err);
+}
+
+// Mount registration routes (student requests + admin approvals)
+try {
+    const registrationRouter = require(path.join(__dirname, 'routes', 'registrationRoutes'));
+    app.use('/auth', registrationRouter);
+} catch (err) {
+    console.warn('Registration routes not available:', err && err.message ? err.message : err);
 }
 
 // Try connecting to DB at startup so errors are visible early

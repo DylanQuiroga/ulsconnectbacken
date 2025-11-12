@@ -3,29 +3,36 @@ const router = express.Router();
 const path = require('path');
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
-// Helper to protect routes
-function ensureAuth(req, res, next) {
-    if (req.session && req.session.user) return next();
-    return res.redirect('/login');
-}
+const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 
 // Signup form
 router.get('/signup', (req, res) => {
     res.render('signup', { error: null });
 });
 
-// Signup submit
+// Signup submit -> create registration request for admin approval
 router.post('/signup', async (req, res) => {
-    const { correoUniversitario, contrasena, nombre } = req.body || {};
+    const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses } = req.body || {};
     if (!correoUniversitario || !contrasena || !nombre) return res.render('signup', { error: 'Correo, nombre y contraseña son requeridos' });
 
+    // Prevent creating user immediately. Check if user already exists
     const existing = await userModel.findByCorreo(correoUniversitario);
     if (existing) return res.render('signup', { error: 'El usuario ya existe' });
 
-    const user = await userModel.createUser({ correoUniversitario, contrasena, nombre });
-    // Auto-login after signup
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre };
-    res.redirect('/profile');
+    // Check for existing pending request
+    const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'models', 'RegistrationRequest'));
+    const pending = await RegistrationRequest.findOne({ correoUniversitario });
+    if (pending && pending.status === 'pending') return res.render('signup', { error: 'Ya existe una solicitud pendiente para este correo' });
+
+    // Hash password and create request
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash(contrasena, 10);
+
+    const reqDoc = new RegistrationRequest({ correoUniversitario, contrasenaHash: hash, nombre, telefono: telefono || null, carrera: carrera || '', intereses: intereses || [] });
+    await reqDoc.save();
+
+    // Inform user that request was sent
+    res.render('signup-success', { message: 'Solicitud de registro enviada. Un administrador revisará su cuenta.' });
 });
 
 // Login form
@@ -42,7 +49,7 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.render('login', { error: 'Correo o contraseña inválidos' });
 
     const user = await userModel.findByCorreo(correoUniversitario);
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre };
+    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, role: user.rol || user.role || 'estudiante' };
     res.redirect('/profile');
 });
 
