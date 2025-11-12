@@ -18,7 +18,7 @@ function isInstitutionalEmail(email) {
 router.post('/request', [
   body('correoUniversitario').isEmail().withMessage('Correo inválido').custom(email => {
     if (!isInstitutionalEmail(email)) {
-      throw new Error('Solo correos @usena.cl o @alumnouls.cl son permitidos');
+      throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
     }
     return true;
   }),
