@@ -12,6 +12,10 @@ const { promisify } = require('util');
 // Promisify fs.stat function
 const stat = promisify(fs.stat);
 
+// Session support
+const session = require('express-session');
+const db = require('./lib/db');
+
 // Set EJS as view engine
 app.set('view engine', 'ejs');
 // Set views directory
@@ -19,6 +23,34 @@ app.set('views', path.join(__dirname, 'views'));
 
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
+
+// Body parsing for form submissions
+app.use(express.urlencoded({ extended: true }));
+
+// Basic session configuration (for demo). In production, use secure store & env secret
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }
+}));
+
+// Mount auth routes (created separately)
+try {
+    const authRouter = require(path.join(__dirname, 'routes', 'auth'));
+    app.use('/', authRouter);
+} catch (err) {
+    // If the routes file doesn't exist yet, ignore so app still runs
+}
+
+// Try connecting to DB at startup so errors are visible early
+db.connect().then(() => {
+    console.log('Connected to MongoDB');
+}).catch(err => {
+    console.warn('Warning: could not connect to MongoDB. Auth will fail without a DB.');
+    // log error for debugging
+    console.warn(err && err.message ? err.message : err);
+});
 
 // Fetch blog posts
 async function getBlogPosts() {
