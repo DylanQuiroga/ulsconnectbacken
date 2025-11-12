@@ -12,6 +12,8 @@ const { promisify } = require('util');
 // Promisify fs.stat function
 const stat = promisify(fs.stat);
 
+const cors = require('cors');
+
 // Session support
 const session = require('express-session');
 const db = require('./lib/db');
@@ -24,15 +26,36 @@ app.set('views', path.join(__dirname, 'views'));
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
+app.use(cors({
+    origin: function (origin, callback) {
+        const allowed = [
+            process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+            'http://localhost:5174'
+        ];
+        // allow tools like curl/postman (no origin)
+        if (!origin) return callback(null, true);
+        if (allowed.indexOf(origin) !== -1) return callback(null, true);
+        return callback(new Error('CORS not allowed for origin ' + origin), false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+}));
+
 // Body parsing for form submissions
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Basic session configuration (for demo). In production, use secure store & env secret
+// Session config: allow cross-site cookies in production (SameSite=None requires secure:true)
 app.use(session({
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    }
 }));
 
 // Mount auth routes (created separately)
@@ -118,7 +141,7 @@ app.get('/blog/:postTitle', async (req, res) => {
     const postTitle = req.params.postTitle;
     const posts = await getBlogPosts();
     // Find post by title
-    const post = posts.find(p => 
+    const post = posts.find(p =>
         p.slug === postTitle);
 
     if (post) {
