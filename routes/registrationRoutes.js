@@ -7,7 +7,7 @@ const ensureRole = require('../middleware/ensureRole');
 const userModel = require('../lib/userModel');
 
 // Allowed institutional email domains
-const ALLOWED_DOMAINS = ['usena.cl', 'alumnouls.cl'];
+const ALLOWED_DOMAINS = ['userena.cl', 'alumnouls.cl'];
 
 function isInstitutionalEmail(email) {
   const domain = email.split('@')[1];
