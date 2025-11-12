@@ -1,6 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const path = require('path');
+const helmet = require('helmet');
+const MongoStore = require('connect-mongo');
 // Import fs-extra module for file operations
 const fs = require('fs-extra');
 // Import markdown-it for Markdown to HTML conversion
@@ -12,9 +15,15 @@ const { promisify } = require('util');
 // Promisify fs.stat function
 const stat = promisify(fs.stat);
 
-// Session support
+// Security and middleware
 const session = require('express-session');
+const { authLimiter } = require('./middleware/rateLimiter');
+const { csrfToken, validateCSRFToken } = require('./middleware/csrf');
+const { initEmailService } = require('./lib/emailService');
 const db = require('./lib/db');
+
+// Security headers
+app.use(helmet());
 
 // Set EJS as view engine
 app.set('view engine', 'ejs');
@@ -30,13 +39,39 @@ app.use(express.urlencoded({ extended: true }));
 // JSON body parser for APIs
 app.use(express.json());
 
-// Basic session configuration (for demo). In production, use secure store & env secret
-app.use(session({
+// CSRF token middleware (generate tokens for all requests)
+app.use(csrfToken);
+
+// Session configuration with MongoDB store
+const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
-}));
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // true in production (requires HTTPS)
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+};
+
+// Use MongoDB store for sessions (if connected)
+db.connect().then(() => {
+    sessionConfig.store = MongoStore.create({
+        mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ulsconnect',
+        touchAfter: 24 * 3600 // lazy session update (24 hours)
+    });
+}).catch(err => {
+    console.warn('⚠️  MongoDB session store unavailable, using memory store');
+});
+
+app.use(session(sessionConfig));
+
+// Initialize email service
+initEmailService();
+
+// Apply rate limiting to auth endpoints
+app.post('/signup', authLimiter);
+app.post('/login', authLimiter);
 
 // Mount auth routes (created separately)
 try {
@@ -44,6 +79,7 @@ try {
     app.use('/', authRouter);
 } catch (err) {
     // If the routes file doesn't exist yet, ignore so app still runs
+    console.warn('Auth routes not available:', err && err.message ? err.message : err);
 }
 
 // Mount activity routes

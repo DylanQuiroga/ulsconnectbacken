@@ -4,7 +4,9 @@ const { body, param, validationResult } = require('express-validator');
 const RegistrationRequest = require('../lib/models/RegistrationRequest');
 const ensureAuth = require('../middleware/ensureAuth');
 const ensureRole = require('../middleware/ensureRole');
+const { validateCSRFToken } = require('../middleware/csrf');
 const userModel = require('../lib/userModel');
+const { sendRegistrationRequestNotification, sendRegistrationApprovedNotification, sendRegistrationRejectedNotification } = require('../lib/emailService');
 
 // Allowed institutional email domains
 const ALLOWED_DOMAINS = ['userena.cl', 'alumnouls.cl'];
@@ -15,7 +17,7 @@ function isInstitutionalEmail(email) {
 }
 
 // Student submits registration request
-router.post('/request', [
+router.post('/request', validateCSRFToken, [
   body('correoUniversitario').isEmail().withMessage('Correo inválido').custom(email => {
     if (!isInstitutionalEmail(email)) {
       throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
@@ -40,7 +42,8 @@ router.post('/request', [
     const reqDoc = new RegistrationRequest({ correoUniversitario, contrasenaHash: hash, nombre, telefono: telefono || null, carrera: carrera || '', intereses: intereses || [] });
     await reqDoc.save();
 
-    // TODO: notify admins/staff (email/webhook)
+    // Send notification to admins
+    sendRegistrationRequestNotification(reqDoc);
 
     res.status(201).json({ message: 'Solicitud enviada' });
   } catch (err) {
@@ -78,6 +81,9 @@ router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id'
     reqDoc.reviewedAt = new Date();
     await reqDoc.save();
 
+    // Send approval notification to user
+    sendRegistrationApprovedNotification(reqDoc.correoUniversitario, reqDoc.nombre);
+
     res.json({ message: 'Approved', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
   } catch (err) {
     console.error(err);
@@ -100,6 +106,9 @@ router.post('/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id')
     reqDoc.reviewedAt = new Date();
     reqDoc.reviewNotes = req.body.notes || '';
     await reqDoc.save();
+
+    // Send rejection notification to user
+    sendRegistrationRejectedNotification(reqDoc.correoUniversitario, reqDoc.nombre, req.body.notes);
 
     res.json({ message: 'Rejected' });
   } catch (err) {

@@ -10,6 +10,7 @@
     <p style="color:red"><%= error %></p>
   <% } %>
   <form method="POST" action="/login">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label>Correo universitario: <input name="correoUniversitario" required /></label><br />
     <label>Contraseña: <input name="contrasena" type="password" required /></label><br />
     <button type="submit">Iniciar sesión</button>
