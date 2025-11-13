@@ -68,11 +68,33 @@ router.get('/profile', ensureAuth, (req, res) => {
     res.render('profile', { user: req.session.user });
 });
 
-// Logout
-router.get('/logout', (req, res) => {
-    req.session.destroy(err => {
-        res.redirect('/');
-    });
+// Devuelve la sesión actual (JSON) — usado por frontend
+router.get('/me', (req, res) => {
+    if (req.session && req.session.user) {
+        return res.status(200).json({ user: req.session.user });
+    }
+    return res.status(401).json({ error: 'No authenticated' });
 });
+
+// Logout: POST recomendado; GET por compatibilidad
+function performLogout(req, res) {
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Error destroying session:', err);
+            if (req.xhr || req.headers.accept?.includes('application/json')) {
+                return res.status(500).json({ error: 'Error al cerrar sesión' });
+            }
+            return res.redirect('/profile');
+        }
+        res.clearCookie('connect.sid');
+        if (req.xhr || req.headers.accept?.includes('application/json')) {
+            return res.status(200).json({ ok: true });
+        }
+        return res.redirect('/');
+    });
+}
+
+router.post('/logout', (req, res) => performLogout(req, res));
+router.get('/logout', (req, res) => performLogout(req, res));
 
 module.exports = router;
