@@ -28,21 +28,30 @@ router.post('/signup', async (req, res) => {
     res.redirect('/profile');
 });
 
-// Login form
-router.get('/login', (req, res) => {
-    res.render('login', { error: null });
-});
 
 // Login submit
 router.post('/login', async (req, res) => {
     const { correoUniversitario, contrasena } = req.body || {};
-    if (!correoUniversitario || !contrasena) return res.render('login', { error: 'Correo y contraseña requeridos' });
+    if (!correoUniversitario || !contrasena) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(400).json({ error: 'Correo y contraseña requeridos' });
+        return res.render('login', { error: 'Correo y contraseña requeridos' });
+    }
 
+    
     const ok = await userModel.comparePassword(correoUniversitario, contrasena);
-    if (!ok) return res.render('login', { error: 'Correo o contraseña inválidos' });
+    if (!ok) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(401).json({ error: 'Correo o contraseña inválidos' });
+        return res.render('login', { error: 'Correo o contraseña inválidos' });
+    }
 
     const user = await userModel.findByCorreo(correoUniversitario);
+    if (!user) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(404).json({ error: 'Usuario no encontrado' });
+        return res.render('login', { error: 'Usuario no encontrado' });
+    }
+
     req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre };
+    if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(200).json({ ok: true });
     res.redirect('/profile');
 });
 
