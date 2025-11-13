@@ -17,14 +17,22 @@ router.get('/signup', (req, res) => {
 // Signup submit
 router.post('/signup', async (req, res) => {
     const { correoUniversitario, contrasena, nombre, rol, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
-    if (!correoUniversitario || !contrasena || !nombre) return res.render('signup', { error: 'Correo, nombre y contraseña son requeridos' });
+    if (!correoUniversitario || !contrasena || !nombre) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(400).json({ error: 'Correo, nombre y contraseña son requeridos' });
+        return res.render('signup', { error: 'Correo, nombre y contraseña son requeridos' });
+    }
 
     const existing = await userModel.findByCorreo(correoUniversitario);
-    if (existing) return res.render('signup', { error: 'El usuario ya existe' });
+    if (existing) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(409).json({ error: 'El usuario ya existe' });
+        return res.render('signup', { error: 'El usuario ya existe' });
+    }
 
     const user = await userModel.createUser({ correoUniversitario, contrasena, nombre, rol, telefono, carrera, intereses, comuna, direccion, edad, status });
     // Auto-login after signup
     req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, rol: user.rol, telefono: user.telefono, carrera: user.carrera, intereses: user.intereses, comuna: user.comuna, direccion: user.direccion, edad: user.edad, status: user.status };
+
+    if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(201).json({ ok: true });
     res.redirect('/profile');
 });
 
