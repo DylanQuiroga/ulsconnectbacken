@@ -66,6 +66,13 @@ try {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
 
+try {
+    const activityRouter = require(path.join(__dirname, 'routes', 'activity'));
+    app.use('/api/actividades', activityRouter);
+} catch (err) {
+    // If the routes file doesn't exist yet, ignore so app still runs
+}
+
 // Try connecting to DB at startup so errors are visible early
 db.connect().then(() => {
     console.log('Connected to MongoDB');
