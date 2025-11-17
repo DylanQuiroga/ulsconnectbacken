@@ -25,11 +25,6 @@ const db = require('./lib/db');
 // Security headers
 app.use(helmet());
 
-// Set EJS as view engine
-app.set('view engine', 'ejs');
-// Set views directory
-app.set('views', path.join(__dirname, 'views'));
-
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
@@ -161,25 +156,52 @@ async function getBlogPosts() {
     return posts;
 }
 
-// Home page route
+// Home page route - Returns available posts as JSON
 app.get('/', async (req, res) => {
-    const posts = await getBlogPosts();
-    res.render('index', { posts });
+    try {
+        const posts = await getBlogPosts();
+        res.json({ 
+            success: true, 
+            message: 'Available blog posts',
+            posts: posts.map(p => ({
+                title: p.title,
+                slug: p.slug,
+                summary: p.summary,
+                dateString: p.dateString,
+                tags: p.tags,
+                url: `/blog/${p.slug}`
+            }))
+        });
+    } catch (err) {
+        console.error('Error fetching posts:', err);
+        res.status(500).json({ success: false, message: 'Error fetching posts', error: err.message });
+    }
 });
 
-// Single post route
+// Single post route - Returns full post content as JSON
 app.get('/blog/:postTitle', async (req, res) => {
-    // Replace hyphens with spaces in post title
-    const postTitle = req.params.postTitle;
-    const posts = await getBlogPosts();
-    // Find post by title
-    const post = posts.find(p => 
-        p.slug === postTitle);
+    try {
+        const postTitle = req.params.postTitle;
+        const posts = await getBlogPosts();
+        const post = posts.find(p => p.slug === postTitle);
 
-    if (post) {
-        res.render('single', { post });
-    } else {
-        res.status(404).send('Post not found');
+        if (post) {
+            res.json({ 
+                success: true, 
+                post: {
+                    title: post.title,
+                    slug: post.slug,
+                    content: post.content,
+                    dateString: post.dateString,
+                    tags: post.tags
+                }
+            });
+        } else {
+            res.status(404).json({ success: false, message: 'Post not found' });
+        }
+    } catch (err) {
+        console.error('Error fetching post:', err);
+        res.status(500).json({ success: false, message: 'Error fetching post', error: err.message });
     }
 });
 
