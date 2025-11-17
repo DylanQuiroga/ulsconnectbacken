@@ -16,59 +16,88 @@ router.get('/signup', (req, res) => {
 
 // POST /signup - Submit registration request for admin approval
 router.post('/signup', async (req, res) => {
-    const { correoUniversitario, contrasena, nombre, rol, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
+    const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses } = req.body || {};
+    
+    // Validate required fields
     if (!correoUniversitario || !contrasena || !nombre) {
-        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(400).json({ error: 'Correo, nombre y contraseña son requeridos' });
-        return res.render('signup', { error: 'Correo, nombre y contraseña son requeridos' });
+        return res.status(400).json({ success: false, message: 'Correo, nombre y contraseña son requeridos' });
     }
 
-    // Prevent creating user immediately. Check if user already exists
-    const existing = await userModel.findByCorreo(correoUniversitario);
-    if (existing) {
-        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(409).json({ error: 'El usuario ya existe' });
-        return res.render('signup', { error: 'El usuario ya existe' });
+    try {
+        // Prevent creating user immediately. Check if user already exists
+        const existing = await userModel.findByCorreo(correoUniversitario);
+        if (existing) {
+            return res.status(409).json({ success: false, message: 'El usuario ya existe' });
+        }
+
+        // Check for existing pending request
+        const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'models', 'RegistrationRequest'));
+        const pending = await RegistrationRequest.findOne({ correoUniversitario });
+        if (pending && pending.status === 'pending') {
+            return res.status(409).json({ success: false, message: 'Ya existe una solicitud pendiente para este correo' });
+        }
+
+        // Hash password and create request
+        const bcrypt = require('bcryptjs');
+        const hash = await bcrypt.hash(contrasena, 10);
+
+        const reqDoc = new RegistrationRequest({ correoUniversitario, contrasenaHash: hash, nombre, telefono: telefono || null, carrera: carrera || '', intereses: intereses || [] });
+        await reqDoc.save();
+
+        res.status(201).json({ success: true, message: 'Solicitud de registro enviada. Un administrador revisará su cuenta.', registrationRequestId: reqDoc._id });
+    } catch (err) {
+        console.error('Signup error:', err);
+        res.status(500).json({ success: false, message: 'Error en el registro', error: err.message });
     }
-
-    const user = await userModel.createUser({ correoUniversitario, contrasena, nombre, rol, telefono, carrera, intereses, comuna, direccion, edad, status });
-    // Auto-login after signup
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, rol: user.rol, telefono: user.telefono, carrera: user.carrera, intereses: user.intereses, comuna: user.comuna, direccion: user.direccion, edad: user.edad, status: user.status };
-
-    if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(201).json({ ok: true });
-    res.redirect('/profile');
 });
 
+// GET /login - Returns instructions for login (JSON API info)
+router.get('/login', (req, res) => {
+    res.json({
+        message: 'Para iniciar sesión, envíe un POST a /auth/login con correoUniversitario y contrasena',
+        endpoint: 'POST /auth/login',
+        requiredFields: ['correoUniversitario', 'contrasena']
+    });
+});
 
 // POST /login - Submit login credentials
 router.post('/login', async (req, res) => {
     const { correoUniversitario, contrasena } = req.body || {};
+    
     if (!correoUniversitario || !contrasena) {
-        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(400).json({ error: 'Correo y contraseña requeridos' });
-        return res.render('login', { error: 'Correo y contraseña requeridos' });
+        return res.status(400).json({ success: false, message: 'Correo y contraseña requeridos' });
     }
 
+    try {
+        const ok = await userModel.comparePassword(correoUniversitario, contrasena);
+        if (!ok) {
+            return res.status(401).json({ success: false, message: 'Correo o contraseña inválidos' });
+        }
 
-    const ok = await userModel.comparePassword(correoUniversitario, contrasena);
-    if (!ok) {
-        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(401).json({ error: 'Correo o contraseña inválidos' });
-        return res.render('login', { error: 'Correo o contraseña inválidos' });
+        const user = await userModel.findByCorreo(correoUniversitario);
+        req.session.user = { 
+            id: user._id, 
+            correoUniversitario: user.correoUniversitario, 
+            nombre: user.nombre, 
+            role: user.rol || user.role || 'estudiante' 
+        };
+        
+        res.json({ 
+            success: true, 
+            message: 'Sesión iniciada correctamente', 
+            user: req.session.user 
+        });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ success: false, message: 'Error en inicio de sesión', error: err.message });
     }
-
-    const user = await userModel.findByCorreo(correoUniversitario);
-    if (!user) {
-        if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(404).json({ error: 'Usuario no encontrado' });
-        return res.render('login', { error: 'Usuario no encontrado' });
-    }
-
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, telefono: user.telefono, intereses: user.intereses || [] };
-    if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(200).json({ ok: true });
-    res.redirect('/profile');
 });
 
 // GET /profile - Get current user profile (protected)
 router.get('/profile', ensureAuth, (req, res) => {
-    res.json({
-        success: true,
-        user: req.session.user
+    res.json({ 
+        success: true, 
+        user: req.session.user 
     });
 });
 
@@ -81,33 +110,5 @@ router.get('/logout', (req, res) => {
         res.json({ success: true, message: 'Sesión cerrada correctamente' });
     });
 });
-// Devuelve la sesión actual (JSON) — usado por frontend
-router.get('/me', (req, res) => {
-    if (req.session && req.session.user) {
-        return res.status(200).json({ user: req.session.user });
-    }
-    return res.status(401).json({ error: 'No authenticated' });
-});
-
-// Logout: POST recomendado; GET por compatibilidad
-function performLogout(req, res) {
-    req.session.destroy(err => {
-        if (err) {
-            console.error('Error destroying session:', err);
-            if (req.xhr || req.headers.accept?.includes('application/json')) {
-                return res.status(500).json({ error: 'Error al cerrar sesión' });
-            }
-            return res.redirect('/profile');
-        }
-        res.clearCookie('connect.sid');
-        if (req.xhr || req.headers.accept?.includes('application/json')) {
-            return res.status(200).json({ ok: true });
-        }
-        return res.redirect('/');
-    });
-}
-
-router.post('/logout', (req, res) => performLogout(req, res));
-router.get('/logout', (req, res) => performLogout(req, res));
 
 module.exports = router;
