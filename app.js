@@ -23,6 +23,8 @@ app.set('view engine', 'ejs');
 // Set views directory
 app.set('views', path.join(__dirname, 'views'));
 
+app.set("trust proxy", 1);
+
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
