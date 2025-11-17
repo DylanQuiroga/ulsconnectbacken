@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
-
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 
 // Signup form
