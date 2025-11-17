@@ -1,0 +1,120 @@
+const express = require('express');
+const router = express.Router();
+const { body, param, validationResult } = require('express-validator');
+const RegistrationRequest = require('../lib/models/RegistrationRequest');
+const ensureAuth = require('../middleware/ensureAuth');
+const ensureRole = require('../middleware/ensureRole');
+const { validateCSRFToken } = require('../middleware/csrf');
+const userModel = require('../lib/userModel');
+const { sendRegistrationRequestNotification, sendRegistrationApprovedNotification, sendRegistrationRejectedNotification } = require('../lib/emailService');
+
+// Allowed institutional email domains
+const ALLOWED_DOMAINS = ['userena.cl', 'alumnouls.cl'];
+
+function isInstitutionalEmail(email) {
+  const domain = email.split('@')[1];
+  return ALLOWED_DOMAINS.includes(domain);
+}
+
+// Student submits registration request
+router.post('/request', validateCSRFToken, [
+  body('correoUniversitario').isEmail().withMessage('Correo inválido').custom(email => {
+    if (!isInstitutionalEmail(email)) {
+      throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
+    }
+    return true;
+  }),
+  body('contrasena').isLength({ min: 6 }).withMessage('Contraseña mínima 6 caracteres'),
+  body('nombre').isString().notEmpty().withMessage('Nombre requerido')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses } = req.body;
+  try {
+    // Check existing user
+    const existing = await userModel.findByCorreo(correoUniversitario);
+    if (existing) return res.status(409).json({ message: 'Usuario ya registrado' });
+
+    // Hash password and create request
+    const bcrypt = require('bcryptjs');
+    const hash = await bcrypt.hash(contrasena, 10);
+
+    const reqDoc = new RegistrationRequest({ correoUniversitario, contrasenaHash: hash, nombre, telefono: telefono || null, carrera: carrera || '', intereses: intereses || [] });
+    await reqDoc.save();
+
+    // Send notification to admins
+    sendRegistrationRequestNotification(reqDoc);
+
+    res.status(201).json({ message: 'Solicitud enviada' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error creando solicitud' });
+  }
+});
+
+// Admin/Staff: list pending requests
+router.get('/requests', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const items = await RegistrationRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching requests' });
+  }
+});
+
+// Approve request
+router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
+
+    // create actual user from hash
+    const created = await userModel.createUserFromHash({ correoUniversitario: reqDoc.correoUniversitario, contrasenaHash: reqDoc.contrasenaHash, nombre: reqDoc.nombre, telefono: reqDoc.telefono, carrera: reqDoc.carrera, intereses: reqDoc.intereses });
+
+    reqDoc.status = 'approved';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    await reqDoc.save();
+
+    // Send approval notification to user
+    sendRegistrationApprovedNotification(reqDoc.correoUniversitario, reqDoc.nombre);
+
+    res.json({ message: 'Approved', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error approving request' });
+  }
+});
+
+// Reject request
+router.post('/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id').isMongoId(), body('notes').optional().isString()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
+
+    reqDoc.status = 'rejected';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    reqDoc.reviewNotes = req.body.notes || '';
+    await reqDoc.save();
+
+    // Send rejection notification to user
+    sendRegistrationRejectedNotification(reqDoc.correoUniversitario, reqDoc.nombre, req.body.notes);
+
+    res.json({ message: 'Rejected' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error rejecting request' });
+  }
+});
+
+module.exports = router;

@@ -1,6 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const path = require('path');
+const helmet = require('helmet');
+const MongoStore = require('connect-mongo');
 // Import fs-extra module for file operations
 const fs = require('fs-extra');
 // Import markdown-it for Markdown to HTML conversion
@@ -15,8 +18,15 @@ const stat = promisify(fs.stat);
 const cors = require('cors');
 
 // Session support
+// Security and middleware
 const session = require('express-session');
+const { authLimiter } = require('./middleware/rateLimiter');
+const { csrfToken, validateCSRFToken } = require('./middleware/csrf');
+const { initEmailService } = require('./lib/emailService');
 const db = require('./lib/db');
+
+// Security headers
+app.use(helmet());
 
 // Set EJS as view engine
 app.set('view engine', 'ejs');
@@ -49,18 +59,42 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session config: allow cross-site cookies in production (SameSite=None requires secure:true)
-app.use(session({
+// JSON body parser for APIs
+app.use(express.json());
+
+// Session configuration with MongoDB store (MUST come before csrfToken middleware)
+const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
     cookie: {
+        secure: process.env.NODE_ENV === 'production', // true in production (requires HTTPS)
         httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
-}));
+};
+
+// Use MongoDB store for sessions (if connected)
+db.connect().then(() => {
+    sessionConfig.store = MongoStore.create({
+        mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ulsconnect',
+        touchAfter: 24 * 3600 // lazy session update (24 hours)
+    });
+}).catch(err => {
+    console.warn('⚠️  MongoDB session store unavailable, using memory store');
+});
+
+app.use(session(sessionConfig));
+
+// CSRF token middleware (generate tokens for all requests) - MUST come after session
+app.use(csrfToken);
+
+// Initialize email service
+initEmailService();
+
+// Apply rate limiting to auth endpoints
+app.post('/signup', authLimiter);
+app.post('/login', authLimiter);
 
 // Mount auth routes (created separately)
 try {
@@ -68,6 +102,23 @@ try {
     app.use('/', authRouter);
 } catch (err) {
     // If the routes file doesn't exist yet, ignore so app still runs
+    console.warn('Auth routes not available:', err && err.message ? err.message : err);
+}
+
+// Mount activity routes
+try {
+    const activityRouter = require(path.join(__dirname, 'routes', 'activityRoutes'));
+    app.use('/api/activities', activityRouter);
+} catch (err) {
+    console.warn('Activity routes not available:', err && err.message ? err.message : err);
+}
+
+// Mount registration routes (student requests + admin approvals)
+try {
+    const registrationRouter = require(path.join(__dirname, 'routes', 'registrationRoutes'));
+    app.use('/auth', registrationRouter);
+} catch (err) {
+    console.warn('Registration routes not available:', err && err.message ? err.message : err);
 }
 
 try {

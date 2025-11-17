@@ -2,19 +2,14 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
-
-// Helper to protect routes
-function ensureAuth(req, res, next) {
-    if (req.session && req.session.user) return next();
-    return res.redirect('/login');
-}
+const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 
 // Signup form
 router.get('/signup', (req, res) => {
     res.render('signup', { error: null });
 });
 
-// Signup submit
+// Signup submit -> create registration request for admin approval
 router.post('/signup', async (req, res) => {
     const { correoUniversitario, contrasena, nombre, rol, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
     if (!correoUniversitario || !contrasena || !nombre) {
@@ -22,6 +17,7 @@ router.post('/signup', async (req, res) => {
         return res.render('signup', { error: 'Correo, nombre y contraseña son requeridos' });
     }
 
+    // Prevent creating user immediately. Check if user already exists
     const existing = await userModel.findByCorreo(correoUniversitario);
     if (existing) {
         if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(409).json({ error: 'El usuario ya existe' });
@@ -45,7 +41,7 @@ router.post('/login', async (req, res) => {
         return res.render('login', { error: 'Correo y contraseña requeridos' });
     }
 
-    
+
     const ok = await userModel.comparePassword(correoUniversitario, contrasena);
     if (!ok) {
         if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(401).json({ error: 'Correo o contraseña inválidos' });
@@ -58,7 +54,7 @@ router.post('/login', async (req, res) => {
         return res.render('login', { error: 'Usuario no encontrado' });
     }
 
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, telefono: user.telefono, intereses: user.intereses || []};
+    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, telefono: user.telefono, intereses: user.intereses || [] };
     if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(200).json({ ok: true });
     res.redirect('/profile');
 });
