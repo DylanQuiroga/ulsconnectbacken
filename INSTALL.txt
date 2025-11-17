@@ -1,0 +1,86 @@
+ULSConnect Backend - Instrucciones de instalación
+
+Archivo: INSTALL.txt
+Ruta: ./INSTALL.txt
+
+Propósito:
+Este archivo contiene los pasos mínimos que deben seguir otros desarrolladores para instalar, configurar y ejecutar el proyecto en desarrollo (Windows - PowerShell). Adáptalo según el entorno de producción.
+
+REQUISITOS
+- Node.js >= 16 (recomendado 18+)
+- npm (v8+)
+- MongoDB accesible (local o Atlas)
+- (Opcional) PM2 para producción
+
+PASOS RÁPIDOS (Desarrollo)
+1) Clona el repositorio
+   git clone https://github.com/DylanQuiroga/ulsconnectbacken.git
+   cd ulsconnectbacken
+
+2) Instala dependencias
+   # PowerShell
+   npm install
+
+3) Configura variables de entorno
+   - Copia el ejemplo y edítalo:
+     copy .env.example .env
+     # (o en PowerShell)
+     cp .env.example .env
+
+   - Ajusta en `.env` (REQUERIDO para desarrollo):
+     - MONGO_URI : URI de MongoDB (ej. mongodb+srv://username:password@cluster.mongodb.net/dbname)
+     - SESSION_SECRET : una cadena segura aleatoria (mín. 32 caracteres)
+     - NODE_ENV : "development" o "production"
+
+   - Ajusta en `.env` (OPCIONAL - Email/SMTP):
+     - SMTP_HOST : servidor SMTP (ej. smtp.gmail.com, mail.servidor.com)
+     - SMTP_PORT : puerto SMTP (ej. 587 o 465)
+     - SMTP_USER : usuario SMTP (tu email)
+     - SMTP_PASS : contraseña SMTP (usa contraseña de app si 2FA está activo)
+     - SMTP_FROM : dirección de origen de emails (ej. noreply@ulsconnect.cl)
+     * Si NO configuras SMTP, verás el aviso "Email service not configured. Notifications will be skipped."
+       Esto es NORMAL en desarrollo y no afecta el funcionamiento de la app.
+
+   - Ajusta en `.env` (OPCIONAL - Rate limiting):
+     - RATE_LIMIT_WINDOW_MS : ventana de tiempo en ms (ej. 900000 = 15 min)
+     - RATE_LIMIT_MAX_REQUESTS : máximo de requests en esa ventana (ej. 5)
+
+4) Ejecuta la app en desarrollo
+   npm run dev
+   # Esto inicia la app con nodemon (recarga automática en cambios)
+   # O sin nodemon:
+   npm start
+
+5) Ejecuta pruebas de integración (rápidas)
+   node test-integration.js
+   # Puedes ajustar TEST_API_URL si tu servidor no está en localhost:3000
+   # TEST_API_URL=http://localhost:3000 node test-integration.js
+
+COMANDOS ÚTILES (PowerShell)
+- Instalar pm2 globalmente (opcional):
+  npm install -g pm2
+- Iniciar con pm2:
+  pm2 start app.js --name ulsconnect --env production
+- Guardar configuración pm2:
+  pm2 save
+
+DESPLIEGUE (resumen rápido)
+- Usar un reverse proxy (nginx) con SSL
+- Asegurar `SESSION_SECRET` y credenciales en variables de entorno
+- Ejecutar `npm install --production` en el servidor
+- Usar PM2 o Docker para gestión de procesos
+
+NOTAS IMPORTANTES
+- Email en desarrollo: el aviso "Email service not configured..." es NORMAL si no configuras SMTP. 
+  No afecta el funcionamiento; solo significa que no se enviarán notificaciones por correo.
+- Cookies seguras: en producción `NODE_ENV=production` + HTTPS garantiza que `cookie.secure` funcione.
+- SMTP: configura credenciales SMTP solo si necesitas enviar emails (solicitudes de registro, etc).
+- CSRF: las vistas EJS ya incluyen el campo `_csrf`; si usas API JSON, valida que el cliente envíe el token.
+- Dominios permitidos para registro: `@usena.cl` y `@alumnouls.cl` (validador en rutas de registro).
+- nodemon: `npm run dev` reinicia la app automáticamente al detectar cambios en archivos `.js` o `.json`.
+
+Contacto / Soporte
+- Repo: https://github.com/DylanQuiroga/ulsconnectbacken
+- Si falta algo en estas instrucciones, por favor abre un issue o PR con la mejora.
+
+Última actualización: 2025-11-17
