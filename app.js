@@ -39,10 +39,7 @@ app.use(express.urlencoded({ extended: true }));
 // JSON body parser for APIs
 app.use(express.json());
 
-// CSRF token middleware (generate tokens for all requests)
-app.use(csrfToken);
-
-// Session configuration with MongoDB store
+// Session configuration with MongoDB store (MUST come before csrfToken middleware)
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
@@ -65,6 +62,9 @@ db.connect().then(() => {
 });
 
 app.use(session(sessionConfig));
+
+// CSRF token middleware (generate tokens for all requests) - MUST come after session
+app.use(csrfToken);
 
 // Initialize email service
 initEmailService();
