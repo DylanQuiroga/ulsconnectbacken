@@ -28,19 +28,20 @@ app.use('/images', express.static(path.join(__dirname, 'images')));
 
 app.use(cors({
     origin: function (origin, callback) {
-        const allowed = [
-            process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
-            'http://localhost:5174'
-        ];
-        // allow tools like curl/postman (no origin)
+        const allowed = (process.env.FRONTEND_ORIGIN || '')
+            .split(',')
+            .map(o => o.trim());
+
+        // localhost extra
+        allowed.push('http://localhost:5173', 'http://localhost:5174');
+
         if (!origin) return callback(null, true);
-        if (allowed.indexOf(origin) !== -1) return callback(null, true);
+        if (allowed.includes(origin)) return callback(null, true);
         return callback(new Error('CORS not allowed for origin ' + origin), false);
     },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+    credentials: true
 }));
+
 
 // Body parsing for form submissions
 app.use(express.json());
