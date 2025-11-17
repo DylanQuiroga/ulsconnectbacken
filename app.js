@@ -15,6 +15,9 @@ const { promisify } = require('util');
 // Promisify fs.stat function
 const stat = promisify(fs.stat);
 
+const cors = require('cors');
+
+// Session support
 // Security and middleware
 const session = require('express-session');
 const { authLimiter } = require('./middleware/rateLimiter');
@@ -25,10 +28,35 @@ const db = require('./lib/db');
 // Security headers
 app.use(helmet());
 
+// Set EJS as view engine
+app.set('view engine', 'ejs');
+// Set views directory
+app.set('views', path.join(__dirname, 'views'));
+
+app.set("trust proxy", 1);
+
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
+app.use(cors({
+    origin: function (origin, callback) {
+        const allowed = (process.env.FRONTEND_ORIGIN || '')
+            .split(',')
+            .map(o => o.trim());
+
+        // localhost extra
+        allowed.push('http://localhost:5173', 'http://localhost:5174');
+
+        if (!origin) return callback(null, true);
+        if (allowed.includes(origin)) return callback(null, true);
+        return callback(new Error('CORS not allowed for origin ' + origin), false);
+    },
+    credentials: true
+}));
+
+
 // Body parsing for form submissions
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // JSON body parser for APIs
@@ -39,7 +67,7 @@ const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
         secure: process.env.NODE_ENV === 'production', // true in production (requires HTTPS)
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -91,6 +119,13 @@ try {
     app.use('/auth', registrationRouter);
 } catch (err) {
     console.warn('Registration routes not available:', err && err.message ? err.message : err);
+}
+
+try {
+    const activityRouter = require(path.join(__dirname, 'routes', 'activity'));
+    app.use('/api/actividades', activityRouter);
+} catch (err) {
+    // If the routes file doesn't exist yet, ignore so app still runs
 }
 
 // Try connecting to DB at startup so errors are visible early
@@ -160,8 +195,8 @@ async function getBlogPosts() {
 app.get('/', async (req, res) => {
     try {
         const posts = await getBlogPosts();
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Available blog posts',
             posts: posts.map(p => ({
                 title: p.title,
@@ -186,8 +221,8 @@ app.get('/blog/:postTitle', async (req, res) => {
         const post = posts.find(p => p.slug === postTitle);
 
         if (post) {
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 post: {
                     title: post.title,
                     slug: post.slug,
