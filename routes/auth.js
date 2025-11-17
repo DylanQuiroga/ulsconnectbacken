@@ -58,7 +58,7 @@ router.post('/login', async (req, res) => {
         return res.render('login', { error: 'Usuario no encontrado' });
     }
 
-    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre };
+    req.session.user = { id: user._id, correoUniversitario: user.correoUniversitario, nombre: user.nombre, telefono: user.telefono, intereses: user.intereses || []};
     if (req.xhr || req.headers.accept?.includes('application/json')) return res.status(200).json({ ok: true });
     res.redirect('/profile');
 });
