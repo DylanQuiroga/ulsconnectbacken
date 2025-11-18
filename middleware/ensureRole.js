@@ -9,9 +9,9 @@ module.exports = function ensureRole(allowedRoles) {
   return async function (req, res, next) {
     const sessionUser = req.session && req.session.user;
     const wantsJson = req.xhr || (req.get('Accept') && req.get('Accept').includes('application/json'));
+
     if (!sessionUser || !sessionUser.id) {
-      if (wantsJson) return res.status(401).json({ message: 'Unauthorized' });
-      return res.redirect('/login');
+      return res.status(401).json({ message: 'Unauthorized' });
     }
 
     try {
