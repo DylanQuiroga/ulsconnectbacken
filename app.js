@@ -92,6 +92,13 @@ try {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
 
+try {
+    const inscripcionRoutes = require('./routes/inscripcionRoutes');
+app.use('/inscripciones', inscripcionRoutes);
+} catch (err) {
+    // If the routes file doesn't exist yet, ignore so app still runs
+}
+
 // Try connecting to DB at startup so errors are visible early
 db.connect().then(() => {
     console.log('Connected to MongoDB');
