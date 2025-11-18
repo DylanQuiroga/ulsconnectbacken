@@ -3,9 +3,10 @@ const path = require('path');
 const router = express.Router();
 //const ActividadModel = require('../lib/activityModel');
 const ActividadModel = require(path.join(__dirname, '..', 'lib', 'activityModel'));
+const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
 
-// Crear una nueva actividad
-router.post('/create', async (req, res) => {
+// Crear una nueva actividad (solo admin/staff)
+router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.crear(req.body);
     res.status(201).json({ success: true, data: actividad });
@@ -18,6 +19,29 @@ router.post('/create', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerTodas();
+    res.status(200).json({ success: true, data: actividades });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Buscar actividades por título y/o tipo (query params: titulo, tipo)
+router.get('/search', async (req, res) => {
+  try {
+    const { titulo, tipo } = req.query || {};
+    const filtros = {};
+
+    // Helper para escapar caracteres especiales en RegExp
+    const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (titulo) {
+      filtros.titulo = { $regex: escapeRegex(titulo), $options: 'i' }; // partial, case-insensitive
+    }
+    if (tipo) {
+      filtros.tipo = { $regex: escapeRegex(tipo), $options: 'i' }; // allow partial match on tipo as well
+    }
+
+    const actividades = await ActividadModel.obtenerTodas(filtros);
     res.status(200).json({ success: true, data: actividades });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -57,8 +81,8 @@ router.get('/estado/:estado', async (req, res) => {
   }
 });
 
-// Actualizar actividad
-router.put('/:id', async (req, res) => {
+// Actualizar actividad (solo admin/staff)
+router.put('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.actualizar(req.params.id, req.body);
     if (!actividad) {
@@ -70,8 +94,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Eliminar actividad
-router.delete('/:id', async (req, res) => {
+// Eliminar actividad (solo admin/staff)
+router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.eliminar(req.params.id);
     if (!actividad) {
