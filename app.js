@@ -77,20 +77,19 @@ try {
     console.warn('Auth routes not available:', err && err.message ? err.message : err);
 }
 
-// Mount activity routes
-try {
-    const activityRouter = require(path.join(__dirname, 'routes', 'activityRoutes'));
-    app.use('/api/activities', activityRouter);
-} catch (err) {
-    console.warn('Activity routes not available:', err && err.message ? err.message : err);
-}
-
 // Mount registration routes (student requests + admin approvals)
 try {
     const registrationRouter = require(path.join(__dirname, 'routes', 'registrationRoutes'));
     app.use('/auth', registrationRouter);
 } catch (err) {
     console.warn('Registration routes not available:', err && err.message ? err.message : err);
+}
+
+try {
+    const activityRouter = require(path.join(__dirname, 'routes', 'activityRoutes'));
+    app.use('/events', activityRouter);
+} catch (err) {
+    // If the routes file doesn't exist yet, ignore so app still runs
 }
 
 // Try connecting to DB at startup so errors are visible early
