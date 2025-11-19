@@ -93,6 +93,14 @@ try {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
 
+// Mount volunteer panel routes (student dashboard)
+try {
+    const volunteerPanelRouter = require(path.join(__dirname, 'routes', 'volunteerPanelRoutes'));
+    app.use('/volunteer', volunteerPanelRouter);
+} catch (err) {
+    console.warn('Volunteer panel routes not available:', err && err.message ? err.message : err);
+}
+
 // Try connecting to DB at startup so errors are visible early
 db.connect().then(() => {
     console.log('Connected to MongoDB');
