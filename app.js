@@ -101,6 +101,14 @@ try {
     console.warn('Volunteer panel routes not available:', err && err.message ? err.message : err);
 }
 
+// Mount admin/coordinator panel routes
+try {
+    const adminPanelRouter = require(path.join(__dirname, 'routes', 'adminPanelRoutes'));
+    app.use('/admin', adminPanelRouter);
+} catch (err) {
+    console.warn('Admin panel routes not available:', err && err.message ? err.message : err);
+}
+
 // Try connecting to DB at startup so errors are visible early
 db.connect().then(() => {
     console.log('Connected to MongoDB');
