@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const { body, param, validationResult } = require('express-validator');
-const RegistrationRequest = require('..lib/models/RegistrationRequest');
+const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'models', 'RegistrationRequest'));
 const ensureAuth = require('../middleware/ensureAuth');
 const ensureRole = require('../middleware/ensureRole');
 const { validateCSRFToken } = require('../middleware/csrf');
