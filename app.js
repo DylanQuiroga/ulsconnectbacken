@@ -88,6 +88,7 @@ try {
 try {
     const activityRouter = require(path.join(__dirname, 'routes', 'activityRoutes'));
     app.use('/events', activityRouter);
+    app.use('/api/activities', activityRouter);
 } catch (err) {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
@@ -208,4 +209,6 @@ app.get('/blog/:postTitle', async (req, res) => {
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
+    console.log(`Available at: http://localhost:${port}`);
+    console.log(`Available at: http://127.0.0.1:${port}`);
 });
