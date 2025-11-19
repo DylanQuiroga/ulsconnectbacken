@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, param, validationResult } = require('express-validator');
-const RegistrationRequest = require('../lib/models/RegistrationRequest');
+const RegistrationRequest = require('..lib/models/RegistrationRequest');
 const ensureAuth = require('../middleware/ensureAuth');
 const ensureRole = require('../middleware/ensureRole');
 const { validateCSRFToken } = require('../middleware/csrf');

@@ -7,8 +7,8 @@ const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'
 // GET /signup - Returns instructions for signup (JSON API info)
 router.get('/signup', (req, res) => {
     res.json({
-        message: 'Para registrarse, envíe un POST a /auth/signup con correoUniversitario, contrasena, nombre, y opcionalmente telefono, carrera, intereses',
-        endpoint: 'POST /auth/signup',
+        message: 'Para registrarse, envíe un POST a /signup con correoUniversitario, contrasena, nombre, y opcionalmente telefono, carrera, intereses',
+        endpoint: 'POST /signup',
         requiredFields: ['correoUniversitario', 'contrasena', 'nombre'],
         optionalFields: ['telefono', 'carrera', 'intereses']
     });
@@ -54,8 +54,8 @@ router.post('/signup', async (req, res) => {
 // GET /login - Returns instructions for login (JSON API info)
 router.get('/login', (req, res) => {
     res.json({
-        message: 'Para iniciar sesión, envíe un POST a /auth/login con correoUniversitario y contrasena',
-        endpoint: 'POST /auth/login',
+        message: 'Para iniciar sesión, envíe un POST a /login con correoUniversitario y contrasena',
+        endpoint: 'POST /login',
         requiredFields: ['correoUniversitario', 'contrasena']
     });
 });

@@ -46,15 +46,15 @@ const sessionConfig = {
     }
 };
 
-// Use MongoDB store for sessions (if connected)
-db.connect().then(() => {
+// Configure MongoDB-backed session store immediately so Express-session never falls back to memory
+try {
     sessionConfig.store = MongoStore.create({
         mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ulsconnect',
         touchAfter: 24 * 3600 // lazy session update (24 hours)
     });
-}).catch(err => {
+} catch (err) {
     console.warn('⚠️  MongoDB session store unavailable, using memory store');
-});
+}
 
 app.use(session(sessionConfig));
 

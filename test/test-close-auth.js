@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 // Start the app
 require('../app');
 
-const USER_EMAIL = 'admin-test@usena.cl';
+const USER_EMAIL = 'admin-test@userena.cl';
 const USER_PASS = 'AdminPass123!';
 const USER_NAME = 'Admin Test';
 
