@@ -50,7 +50,7 @@ This document summarizes the production hardening implementation for ULSConnect 
 ### 6. **Input Validation** ✅
 - **Package:** express-validator 7.0.0
 - **Implemented:**
-  - Institutional email validation (`@usena.cl`, `@alumnouls.cl` only)
+  - Institutional email validation (`@userena.cl`, `@alumnouls.cl` only)
   - Password validation (during signup/registration)
   - MongoDB ObjectId validation for routes
   - String sanitization with `sanitize-html`
