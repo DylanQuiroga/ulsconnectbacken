@@ -8,7 +8,7 @@ const Enrollment = require(path.join(__dirname, '..', 'models', 'Enrollment'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // Crear una nueva actividad (solo admin/staff, pero sin requerir para testing)
-router.post('/create', async (req, res) => {
+router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.crear(req.body);
     res.status(201).json({ success: true, data: actividad });
@@ -164,7 +164,7 @@ router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
   }
 });
 
-// CASO DE USO 9: Cerrar convocatoria y consolidar estados (solo coordinador/admin/staff)
+// CASO DE USO 9: Cerrar convocatoria y consolidar estados (solo coordinador/admin)
 router.post('/:id/close', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { motivo } = req.body || {}; // 'fecha_alcanzada' o 'cupo_completo'
