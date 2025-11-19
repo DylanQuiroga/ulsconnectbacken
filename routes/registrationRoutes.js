@@ -30,7 +30,7 @@ router.post('/request', validateCSRFToken, [
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-  const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses } = req.body;
+  const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body;
   try {
     // Check existing user
     const existing = await userModel.findByCorreo(correoUniversitario);
@@ -40,7 +40,18 @@ router.post('/request', validateCSRFToken, [
     const bcrypt = require('bcryptjs');
     const hash = await bcrypt.hash(contrasena, 10);
 
-    const reqDoc = new RegistrationRequest({ correoUniversitario, contrasenaHash: hash, nombre, telefono: telefono || null, carrera: carrera || '', intereses: intereses || [] });
+    const reqDoc = new RegistrationRequest({
+      correoUniversitario,
+      contrasenaHash: hash,
+      nombre,
+      telefono: telefono || null,
+      carrera: carrera || '',
+      intereses: intereses || [],
+      comuna: comuna || '',
+      direccion: direccion || '',
+      edad: edad || null,
+      status: status || ''
+    });
     await reqDoc.save();
 
     // Send notification to admins
@@ -68,7 +79,7 @@ router.get('/requests', ensureRole(['admin', 'staff']), async (req, res) => {
 router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], async (req, res) => {
 
   const errors = validationResult(req);
-  
+
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
     const id = req.params.id;
@@ -76,8 +87,19 @@ router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id'
     if (!reqDoc) return res.status(404).json({ message: 'Not found' });
     if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
 
-    // create actual user from hash
-    const created = await userModel.createUserFromHash({ correoUniversitario: reqDoc.correoUniversitario, contrasenaHash: reqDoc.contrasenaHash, nombre: reqDoc.nombre, telefono: reqDoc.telefono, carrera: reqDoc.carrera, intereses: reqDoc.intereses });
+    // create actual user from hash with all fields
+    const created = await userModel.createUserFromHash({
+      correoUniversitario: reqDoc.correoUniversitario,
+      contrasenaHash: reqDoc.contrasenaHash,
+      nombre: reqDoc.nombre,
+      telefono: reqDoc.telefono,
+      carrera: reqDoc.carrera,
+      intereses: reqDoc.intereses,
+      comuna: reqDoc.comuna || '',
+      direccion: reqDoc.direccion || '',
+      edad: reqDoc.edad || null,
+      status: reqDoc.status || ''
+    });
 
     reqDoc.status = 'approved';
     reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;

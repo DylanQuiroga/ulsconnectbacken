@@ -4,6 +4,7 @@ const app = express();
 const path = require('path');
 const helmet = require('helmet');
 const MongoStore = require('connect-mongo');
+const cors = require('cors');
 // Import fs-extra module for file operations
 const fs = require('fs-extra');
 // Import markdown-it for Markdown to HTML conversion
@@ -22,6 +23,29 @@ const { csrfToken, validateCSRFToken } = require('./middleware/csrf');
 const { initEmailService } = require('./lib/emailService');
 const db = require('./lib/db');
 
+// CORS configuration with dynamic origin validation
+app.use(cors({
+    origin: function (origin, callback) {
+        const allowed = (process.env.FRONTEND_ORIGIN || '')
+            .split(',')
+            .map(o => o.trim());
+
+        // Add localhost for development
+        allowed.push('http://localhost:5173', 'http://localhost:5174');
+
+        // Allow requests with no origin (mobile apps, Postman, curl)
+        if (!origin) return callback(null, true);
+
+        if (allowed.includes(origin)) return callback(null, true);
+
+        return callback(new Error('CORS not allowed for origin ' + origin), false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    exposedHeaders: ['X-CSRF-Token']
+}));
+
 // Security headers
 app.use(helmet());
 
@@ -39,7 +63,7 @@ const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
         secure: process.env.NODE_ENV === 'production', // true in production (requires HTTPS)
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
@@ -176,8 +200,8 @@ async function getBlogPosts() {
 app.get('/', async (req, res) => {
     try {
         const posts = await getBlogPosts();
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: 'Available blog posts',
             posts: posts.map(p => ({
                 title: p.title,
@@ -202,8 +226,8 @@ app.get('/blog/:postTitle', async (req, res) => {
         const post = posts.find(p => p.slug === postTitle);
 
         if (post) {
-            res.json({ 
-                success: true, 
+            res.json({
+                success: true,
                 post: {
                     title: post.title,
                     slug: post.slug,
