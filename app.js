@@ -93,8 +93,8 @@ try {
 }
 
 try {
-    const inscripcionRoutes = require('./routes/inscripcionRoutes');
-app.use('/inscripciones', inscripcionRoutes);
+    const inscripcionRoutes = require(path.join(__dirname, 'routes', 'inscripcionRoutes'));
+    app.use('/inscripciones', inscripcionRoutes);
 } catch (err) {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
