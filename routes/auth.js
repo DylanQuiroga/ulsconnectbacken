@@ -3,6 +3,8 @@ const router = express.Router();
 const path = require('path');
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
+const passwordResetService = require(path.join(__dirname, '..', 'lib', 'passwordResetService'));
+const { sendPasswordResetEmail } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // GET /signup - Returns instructions for signup (JSON API info)
 router.get('/signup', (req, res) => {
@@ -90,6 +92,68 @@ router.post('/login', async (req, res) => {
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ success: false, message: 'Error en inicio de sesión', error: err.message });
+    }
+});
+
+// POST /password/forgot - Start password reset flow
+router.post('/password/forgot', async (req, res) => {
+    const { correoUniversitario } = req.body || {};
+    if (!correoUniversitario) {
+        return res.status(400).json({ success: false, message: 'Correo requerido' });
+    }
+
+    try {
+        const user = await userModel.findByCorreo(correoUniversitario);
+
+        if (user) {
+            const meta = { ip: req.ip, userAgent: req.headers['user-agent'] || null };
+            const { token, expiresAt } = await passwordResetService.createResetTokenForUser(user._id, meta);
+            await sendPasswordResetEmail({
+                email: user.correoUniversitario,
+                nombre: user.nombre,
+                token,
+                expiresAt
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Si el correo esta registrado recibiras un enlace de recuperacion'
+        });
+    } catch (err) {
+        console.error('Password reset request error:', err);
+        res.status(500).json({ success: false, message: 'No se pudo procesar la solicitud', error: err.message });
+    }
+});
+
+// POST /password/reset - Complete password reset
+router.post('/password/reset', async (req, res) => {
+    const { token, contrasena } = req.body || {};
+    if (!token || !contrasena) {
+        return res.status(400).json({ success: false, message: 'Token y nueva contrasena son requeridos' });
+    }
+    if (contrasena.length < 8) {
+        return res.status(400).json({ success: false, message: 'La contrasena debe tener al menos 8 caracteres' });
+    }
+
+    try {
+        const tokenRecord = await passwordResetService.findValidToken(token);
+        if (!tokenRecord) {
+            return res.status(400).json({ success: false, message: 'Token invalido o expirado' });
+        }
+
+        const userId = tokenRecord.userId || tokenRecord.user || tokenRecord.usuarioId;
+        if (!userId) {
+            return res.status(400).json({ success: false, message: 'Token invalido' });
+        }
+
+        await userModel.updatePassword(userId, contrasena);
+        await passwordResetService.markTokenUsed(tokenRecord._id);
+
+        res.json({ success: true, message: 'Contrasena actualizada correctamente' });
+    } catch (err) {
+        console.error('Password reset error:', err);
+        res.status(500).json({ success: false, message: 'No se pudo restablecer la contrasena', error: err.message });
     }
 });
 
