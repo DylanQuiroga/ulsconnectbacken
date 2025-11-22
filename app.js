@@ -141,6 +141,14 @@ try {
     // If the routes file doesn't exist yet, ignore so app still runs
 }
 
+// Mount attendance routes (attendance management)
+try {
+    const attendanceRoutes = require(path.join(__dirname, 'routes', 'attendanceRoutes'));
+    app.use('/attendance', attendanceRoutes);
+} catch (err) {
+    console.warn('Attendance routes not available:', err && err.message ? err.message : err);
+}
+
 // Try connecting to DB at startup so errors are visible early
 db.connect().then(() => {
     console.log('Connected to MongoDB');

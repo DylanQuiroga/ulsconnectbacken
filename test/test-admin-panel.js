@@ -6,10 +6,10 @@ const bcrypt = require('bcryptjs');
 require('../app');
 
 const db = require('../lib/db');
-const Usuario = require('../lib/models/Usuario');
-const Actividad = require('../lib/models/Actividad');
-const Enrollment = require('../lib/models/Enrollment');
-const RegistroAsistencia = require('../lib/models/RegistroAsistencia');
+const Usuario = require('../lib/schema/Usuario');
+const Actividad = require('../lib/schema/Actividad');
+const Enrollment = require('../lib/schema/Enrollment');
+const RegistroAsistencia = require('../lib/schema/RegistroAsistencia');
 
 const ADMIN_EMAIL = 'admin.panel@test.userena.cl';
 const ADMIN_PASSWORD = 'AdminPanelPass123!';

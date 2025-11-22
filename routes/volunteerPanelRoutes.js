@@ -3,7 +3,7 @@ const path = require('path');
 const router = express.Router();
 
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'models', 'Enrollment'));
+const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
 
 /**
  * Normaliza fechas para evitar exponer objetos Date directos en la respuesta.

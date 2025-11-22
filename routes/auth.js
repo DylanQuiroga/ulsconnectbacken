@@ -33,7 +33,7 @@ router.post('/signup', async (req, res) => {
         }
 
         // Check for existing pending request
-        const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'models', 'RegistrationRequest'));
+        const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistrationRequest'));
         const pending = await RegistrationRequest.findOne({ correoUniversitario });
         if (pending && pending.status === 'pending') {
             return res.status(409).json({ success: false, message: 'Ya existe una solicitud pendiente para este correo' });

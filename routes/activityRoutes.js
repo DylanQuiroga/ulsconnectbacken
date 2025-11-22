@@ -4,7 +4,7 @@ const router = express.Router();
 //const ActividadModel = require('../lib/activityModel');
 const ActividadModel = require(path.join(__dirname, '..', 'lib', 'activityModel'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'models/Enrollment'));
+const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema/Enrollment'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // Crear una nueva actividad (solo admin/staff, pero sin requerir para testing)

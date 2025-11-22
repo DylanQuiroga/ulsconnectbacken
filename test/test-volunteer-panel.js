@@ -6,9 +6,9 @@ const bcrypt = require('bcryptjs');
 require('../app');
 
 const db = require('../lib/db');
-const Usuario = require('../lib/models/Usuario');
-const Actividad = require('../lib/models/Actividad');
-const Enrollment = require('../lib/models/Enrollment');
+const Usuario = require('../lib/schema/Usuario');
+const Actividad = require('../lib/schema/Actividad');
+const Enrollment = require('../lib/schema/Enrollment');
 
 const TEST_EMAIL = 'volunteer.panel@test.userena.cl';
 const TEST_PASSWORD = 'PanelPass123!';

@@ -12,7 +12,7 @@ const USER_NAME = 'Admin Test';
 
 async function ensureAdmin() {
   const mongoose = require('../lib/db').mongoose;
-  const Usuario = require('../lib/models/Usuario');
+  const Usuario = require('../lib/schema/Usuario');
   await require('../lib/db').connect();
 
   let user = await Usuario.findOne({ correoUniversitario: USER_EMAIL });
