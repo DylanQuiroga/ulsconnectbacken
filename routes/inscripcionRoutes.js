@@ -4,11 +4,12 @@ const router = express.Router();
 const InscripcionModel = require(path.join(__dirname, '..', 'lib', 'inscripcionModel'));
 const { validateCSRFToken } = require(path.join(__dirname, '..', 'middleware', 'csrf'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
+const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 
 // Inscribirse en una actividad
-router.post('/:actividadId',  validateCSRFToken, async (req, res) => {
+router.post('/:actividadId',  ensureAuth, async (req, res) => {
   try {
-    const usuarioId = req.usuarioId || req.body.id || req.body.usuarioId;
+    const usuarioId = req.session?.user?.id;
     const { actividadId } = req.params;
     
     if (!usuarioId) {
@@ -68,7 +69,7 @@ router.get('/detalle/:id', async (req, res) => {
 });
 
 // Cancelar inscripción
-router.delete('/:id', validateCSRFToken, async (req, res) => {
+router.delete('/:id', ensureAuth, async (req, res) => {
   try {
     const { motivo } = req.body;
     const inscripcion = await InscripcionModel.cancelar(req.params.id, motivo);
