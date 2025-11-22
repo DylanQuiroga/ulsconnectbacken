@@ -8,7 +8,7 @@ const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'
 // Inscribirse en una actividad
 router.post('/:actividadId',  validateCSRFToken, async (req, res) => {
   try {
-    const usuarioId = req.session?.user?.id;
+    const usuarioId = req.usuarioId || req.body.id || req.body.usuarioId;
     const { actividadId } = req.params;
     
     if (!usuarioId) {

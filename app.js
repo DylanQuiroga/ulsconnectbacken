@@ -17,7 +17,6 @@ const stat = promisify(fs.stat);
 
 // Security and middleware
 const session = require('express-session');
-const cookieParser = require('cookie-parser');
 const { authLimiter } = require('./middleware/rateLimiter');
 const { csrfToken, validateCSRFToken } = require('./middleware/csrf');
 const { initEmailService } = require('./lib/emailService');
@@ -25,8 +24,6 @@ const db = require('./lib/db');
 
 // Security headers
 app.use(helmet());
-
-app.use(cookieParser());
 
 // Serve static images
 app.use('/images', express.static(path.join(__dirname, 'images')));
