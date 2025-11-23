@@ -1,13 +1,13 @@
 const express = require('express');
 const path = require('path');
 const router = express.Router();
-//const ActividadModel = require('../lib/activityModel');
 const ActividadModel = require(path.join(__dirname, '..', 'lib', 'activityModel'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
+const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const Enrollment = require(path.join(__dirname, '..', 'lib', 'models/Enrollment'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
-// Crear una nueva actividad (solo admin/staff, pero sin requerir para testing)
+// Crear una nueva actividad (solo admin/staff)
 router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.crear(req.body);
@@ -27,20 +27,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Buscar actividades por título y/o tipo (query params: titulo, tipo)
+// Buscar actividades por título y/o tipo
 router.get('/search', async (req, res) => {
   try {
     const { titulo, tipo } = req.query || {};
     const filtros = {};
 
-    // Helper para escapar caracteres especiales en RegExp
     const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     if (titulo) {
-      filtros.titulo = { $regex: escapeRegex(titulo), $options: 'i' }; // partial, case-insensitive
+      filtros.titulo = { $regex: escapeRegex(titulo), $options: 'i' };
     }
     if (tipo) {
-      filtros.tipo = { $regex: escapeRegex(tipo), $options: 'i' }; // allow partial match on tipo as well
+      filtros.tipo = { $regex: escapeRegex(tipo), $options: 'i' };
     }
 
     const actividades = await ActividadModel.obtenerTodas(filtros);
@@ -83,14 +82,23 @@ router.get('/estado/:estado', async (req, res) => {
   }
 });
 
-// ENROLL: Inscribirse en una actividad (nueva inscripción)
-router.post('/:id/enroll', async (req, res) => {
+// ✅ CORREGIDO: ENROLL - Inscribirse en una actividad (requiere autenticación)
+router.post('/:id/enroll', ensureAuth, async (req, res) => {
   try {
-    const { idUsuario, respuestas } = req.body || {};
-
-    if (!idUsuario) {
-      return res.status(400).json({ success: false, error: 'ID de usuario requerido' });
+    // ✅ Obtener userId de la sesión (NO del body)
+    const sessionUser = req.session && req.session.user;
+    if (!sessionUser || !sessionUser.id) {
+      return res.status(401).json({ success: false, error: 'No autenticado' });
     }
+
+    const idUsuario = sessionUser.id;
+    const { respuestas } = req.body || {};
+
+    console.log('📝 Inscripción recibida:', {
+      activityId: req.params.id,
+      userId: idUsuario,
+      sessionData: sessionUser
+    });
 
     // Obtener actividad
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
@@ -115,7 +123,11 @@ router.post('/:id/enroll', async (req, res) => {
     });
 
     if (yaInscrito) {
-      return res.status(409).json({ success: false, error: 'Ya estás inscrito en esta actividad' });
+      return res.status(409).json({
+        success: false,
+        error: 'Ya estás inscrito en esta actividad',
+        enrollment: yaInscrito
+      });
     }
 
     // Crear inscripción
@@ -128,12 +140,15 @@ router.post('/:id/enroll', async (req, res) => {
 
     await nuevaInscripcion.save();
 
+    console.log('✅ Inscripción creada:', nuevaInscripcion);
+
     res.status(201).json({
       success: true,
       message: 'Inscripción realizada correctamente',
       data: nuevaInscripcion
     });
   } catch (error) {
+    console.error('❌ Error en inscripción:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -164,39 +179,33 @@ router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
   }
 });
 
-// CASO DE USO 9: Cerrar convocatoria y consolidar estados (solo coordinador/admin)
+// CASO DE USO 9: Cerrar convocatoria (solo admin/staff)
 router.post('/:id/close', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    const { motivo } = req.body || {}; // 'fecha_alcanzada' o 'cupo_completo'
+    const { motivo } = req.body || {};
     const motivoCierre = motivo || 'fecha_alcanzada';
 
-    // Obtener actividad actual
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
     if (!actividad) {
       return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
     }
 
-    // Si ya está cerrada, retornar error
     if (actividad.estado === 'closed') {
       return res.status(400).json({ success: false, error: 'La actividad ya está cerrada' });
     }
 
-    // Cerrar convocatoria en BD
     const actividadCerrada = await ActividadModel.cerrarConvocatoria(req.params.id, motivoCierre);
 
-    // Obtener todos los inscritos PENDIENTES (estado !== 'confirmado')
     const inscritosPendientes = await Enrollment.find({
       idActividad: req.params.id,
       estado: { $ne: 'confirmado' }
     }).populate('idUsuario', 'correoUniversitario nombre');
 
-    // Consolidar estados: cambiar "inscrito" a "pendiente_cierre"
     await Enrollment.updateMany(
       { idActividad: req.params.id, estado: 'inscrito' },
       { estado: 'pendiente_cierre' }
     );
 
-    // Enviar notificaciones a inscritos pendientes
     const emailsEnviados = [];
     for (const inscrito of inscritosPendientes) {
       if (inscrito.idUsuario && inscrito.idUsuario.correoUniversitario) {
