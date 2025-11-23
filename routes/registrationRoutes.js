@@ -50,7 +50,8 @@ router.post('/request', validateCSRFToken, [
       comuna: comuna || '',
       direccion: direccion || '',
       edad: edad || null,
-      status: status || ''
+      // default to 'pending' to satisfy enum validation
+      status: status || 'pending'
     });
     await reqDoc.save();
 
@@ -66,6 +67,17 @@ router.post('/request', validateCSRFToken, [
 
 // Admin/Staff: list pending requests
 router.get('/requests', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const items = await RegistrationRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching requests' });
+  }
+});
+
+// --- Alias routes to match frontend path /auth/registration/requests ---
+router.get('/registration/requests', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const items = await RegistrationRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
     res.json(items);
@@ -116,8 +128,75 @@ router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id'
   }
 });
 
+// Alias approve
+router.post('/registration/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], async (req, res) => {
+  // duplicate of approve handler:
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
+
+    // create actual user from hash with all fields
+    const created = await userModel.createUserFromHash({
+      correoUniversitario: reqDoc.correoUniversitario,
+      contrasenaHash: reqDoc.contrasenaHash,
+      nombre: reqDoc.nombre,
+      telefono: reqDoc.telefono,
+      carrera: reqDoc.carrera,
+      intereses: reqDoc.intereses,
+      comuna: reqDoc.comuna || '',
+      direccion: reqDoc.direccion || '',
+      edad: reqDoc.edad || null,
+      status: reqDoc.status || ''
+    });
+
+    reqDoc.status = 'approved';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    await reqDoc.save();
+
+    // Send approval notification to user
+    sendRegistrationApprovedNotification(reqDoc.correoUniversitario, reqDoc.nombre);
+
+    res.json({ message: 'Approved', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error approving request' });
+  }
+});
+
 // Reject request
 router.post('/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id').isMongoId(), body('notes').optional().isString()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
+
+    reqDoc.status = 'rejected';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    reqDoc.reviewNotes = req.body.notes || '';
+    await reqDoc.save();
+
+    // Send rejection notification to user
+    sendRegistrationRejectedNotification(reqDoc.correoUniversitario, reqDoc.nombre, req.body.notes);
+
+    res.json({ message: 'Rejected' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error rejecting request' });
+  }
+});
+
+// Alias reject
+router.post('/registration/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id').isMongoId(), body('notes').optional().isString()], async (req, res) => {
+  // duplicate of reject handler:
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
