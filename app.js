@@ -85,6 +85,24 @@ app.use(session(sessionConfig));
 // CSRF token middleware (generate tokens for all requests) - MUST come after session
 app.use(csrfToken);
 
+// ✅ NUEVO: Endpoint para obtener el token CSRF
+app.get('/csrf-token', (req, res) => {
+    const token = req.session.csrfToken || res.locals.csrfToken;
+
+    // Guardar el token en una cookie accesible desde JavaScript
+    res.cookie('XSRF-TOKEN', token, {
+        httpOnly: false, // ✅ IMPORTANTE: false para que JS pueda leerla
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    });
+
+    res.json({
+        success: true,
+        csrfToken: token
+    });
+});
+
 // Initialize email service
 initEmailService();
 
