@@ -53,7 +53,8 @@ router.post('/signup', async (req, res) => {
             comuna: comuna || '',
             direccion: direccion || '',
             edad: edad || null,
-            status: status || ''
+            // ensure valid enum value when not provided
+            status: status || 'pending'
         });
         await reqDoc.save();
 
