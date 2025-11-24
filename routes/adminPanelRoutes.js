@@ -3,9 +3,9 @@ const path = require('path');
 const router = express.Router();
 
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
-const Actividad = require(path.join(__dirname, '..', 'lib', 'models', 'Actividad'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'models', 'Enrollment'));
-const RegistroAsistencia = require(path.join(__dirname, '..', 'lib', 'models', 'RegistroAsistencia'));
+const Actividad = require(path.join(__dirname, '..', 'lib', 'schema', 'Actividad'));
+const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
+const RegistroAsistencia = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistroAsistencia'));
 
 function formatDate(value) {
   if (!value) return null;
