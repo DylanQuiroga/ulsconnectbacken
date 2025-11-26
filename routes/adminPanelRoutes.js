@@ -3,9 +3,10 @@ const path = require('path');
 const router = express.Router();
 
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
+const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const Actividad = require(path.join(__dirname, '..', 'lib', 'schema', 'Actividad'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
-const RegistroAsistencia = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistroAsistencia'));
+const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
+const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendance'));
 const ReporteImpacto = require(path.join(__dirname, '..', 'lib', 'schema', 'ReporteImpacto'));
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
@@ -79,30 +80,35 @@ function calculateTotalHours(actividad, attendedCount) {
 }
 
 async function computeImpactMetrics(actividadId, actividadDoc = null) {
-  const [totalInvitados, totalConfirmados, registrosAsistencia] = await Promise.all([
-    Enrollment.countDocuments({ idActividad: actividadId }),
-    Enrollment.countDocuments({ idActividad: actividadId, estado: 'confirmado' }),
-    RegistroAsistencia.find({ idActividad: actividadId }).select('idUsuario').lean()
+  const [totalInscripciones, inscripcionesActivas, registrosAsistencia] = await Promise.all([
+    Inscripcion.countDocuments({ actividad: actividadId }),
+    Inscripcion.countDocuments({ actividad: actividadId, estado: 'activa' }),
+    Attendance.find({ actividad: actividadId }).select('inscripciones').lean()
   ]);
 
-  const asistentesSet = new Set(
-    registrosAsistencia
-      .map((reg) => (reg.idUsuario ? reg.idUsuario.toString() : null))
-      .filter(Boolean)
-  );
+  const asistentesSet = new Set();
+  registrosAsistencia.forEach((reg) => {
+    if (Array.isArray(reg.inscripciones)) {
+      reg.inscripciones.forEach((ins) => {
+        if (ins.usuario && ins.asistencia === 'presente') {
+          asistentesSet.add(ins.usuario.toString());
+        }
+      });
+    }
+  });
 
   const voluntariosAsistieron = asistentesSet.size;
   const horasTotales = calculateTotalHours(actividadDoc, voluntariosAsistieron);
 
   return {
-    voluntariosInvitados: totalInvitados,
-    voluntariosConfirmados: totalConfirmados,
+    voluntariosInvitados: totalInscripciones,
+    voluntariosConfirmados: inscripcionesActivas,
     voluntariosAsistieron,
     horasTotales
   };
 }
 
-router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const now = new Date();
 
@@ -161,7 +167,7 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
       Actividad.countDocuments({}),
       Actividad.countDocuments({ estado: { $ne: 'closed' } }),
       Actividad.countDocuments({ fechaInicio: { $gte: now } }),
-      Enrollment.aggregate([
+      Inscripcion.aggregate([
         {
           $group: {
             _id: '$estado',
@@ -169,10 +175,10 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
           }
         }
       ]),
-      Enrollment.aggregate([
+      Inscripcion.aggregate([
         {
           $group: {
-            _id: '$idActividad',
+            _id: '$actividad',
             total: { $sum: 1 }
           }
         },
@@ -188,18 +194,18 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         },
         { $unwind: { path: '$actividad', preserveNullAndEmptyArrays: true } }
       ]),
-      Enrollment.find({})
+      Inscripcion.find({})
         .sort({ creadoEn: -1 })
         .limit(10)
-        .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado')
-        .populate('idUsuario', 'nombre correoUniversitario rol')
+        .populate('actividad', 'titulo area tipo fechaInicio fechaFin estado')
+        .populate('usuario', 'nombre correoUniversitario rol')
         .lean(),
-      Enrollment.countDocuments({}),
-      RegistroAsistencia.countDocuments({}),
-      RegistroAsistencia.aggregate([
+      Inscripcion.countDocuments({}),
+      Attendance.countDocuments({}),
+      Attendance.aggregate([
         {
           $group: {
-            _id: '$idActividad',
+            _id: '$actividad',
             total: { $sum: 1 }
           }
         },
@@ -215,11 +221,11 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         },
         { $unwind: { path: '$actividad', preserveNullAndEmptyArrays: true } }
       ]),
-      RegistroAsistencia.find({})
+      Attendance.find({})
         .sort({ fecha: -1 })
         .limit(20)
-        .populate('idActividad', 'titulo area tipo')
-        .populate('idUsuario', 'nombre correoUniversitario')
+        .populate('actividad', 'titulo area tipo')
+        .populate('inscripciones.usuario', 'nombre correoUniversitario')
         .populate('registradoPor', 'nombre correoUniversitario')
         .lean(),
       ReporteImpacto.find({})
@@ -257,19 +263,19 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         estado: item.actividad ? item.actividad.estado : null,
         total: item.total
       })),
-      latest: latestEnrollments.map((enrollment) => ({
-        enrollmentId: enrollment._id ? enrollment._id.toString() : null,
-        status: enrollment.estado,
-        createdAt: formatDate(enrollment.creadoEn),
-        activityId: enrollment.idActividad && enrollment.idActividad._id ? enrollment.idActividad._id.toString() : null,
-        activityTitle: enrollment.idActividad ? enrollment.idActividad.titulo : 'Actividad no disponible',
-        activityStartDate: enrollment.idActividad ? formatDate(enrollment.idActividad.fechaInicio) : null,
-        area: enrollment.idActividad ? enrollment.idActividad.area : null,
-        tipo: enrollment.idActividad ? enrollment.idActividad.tipo : null,
-        userId: enrollment.idUsuario && enrollment.idUsuario._id ? enrollment.idUsuario._id.toString() : null,
-        userName: enrollment.idUsuario ? enrollment.idUsuario.nombre : 'Usuario no disponible',
-        userEmail: enrollment.idUsuario ? enrollment.idUsuario.correoUniversitario : null,
-        userRole: enrollment.idUsuario ? (enrollment.idUsuario.rol || null) : null
+      latest: latestEnrollments.map((inscripcion) => ({
+        enrollmentId: inscripcion._id ? inscripcion._id.toString() : null,
+        status: inscripcion.estado,
+        createdAt: formatDate(inscripcion.creadoEn),
+        activityId: inscripcion.actividad && inscripcion.actividad._id ? inscripcion.actividad._id.toString() : null,
+        activityTitle: inscripcion.actividad ? inscripcion.actividad.titulo : 'Actividad no disponible',
+        activityStartDate: inscripcion.actividad ? formatDate(inscripcion.actividad.fechaInicio) : null,
+        area: inscripcion.actividad ? inscripcion.actividad.area : null,
+        tipo: inscripcion.actividad ? inscripcion.actividad.tipo : null,
+        userId: inscripcion.usuario && inscripcion.usuario._id ? inscripcion.usuario._id.toString() : null,
+        userName: inscripcion.usuario ? inscripcion.usuario.nombre : 'Usuario no disponible',
+        userEmail: inscripcion.usuario ? inscripcion.usuario.correoUniversitario : null,
+        userRole: inscripcion.usuario ? (inscripcion.usuario.rol || null) : null
       }))
     };
 
@@ -286,20 +292,22 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         tipo: item.actividad ? item.actividad.tipo : null,
         total: item.total
       })),
-      recent: recentAttendance.map((record) => ({
-        attendanceId: record._id ? record._id.toString() : null,
-        activityId: record.idActividad && record.idActividad._id ? record.idActividad._id.toString() : null,
-        activityTitle: record.idActividad ? record.idActividad.titulo : 'Actividad no disponible',
-        area: record.idActividad ? record.idActividad.area : null,
-        tipo: record.idActividad ? record.idActividad.tipo : null,
-        userId: record.idUsuario && record.idUsuario._id ? record.idUsuario._id.toString() : null,
-        userName: record.idUsuario ? record.idUsuario.nombre : 'Usuario no disponible',
-        userEmail: record.idUsuario ? record.idUsuario.correoUniversitario : null,
-        recordedAt: formatDate(record.fecha),
-        recordedBy: record.registradoPor && record.registradoPor._id ? record.registradoPor._id.toString() : null,
-        recordedByName: record.registradoPor ? record.registradoPor.nombre : null,
-        recordedByEmail: record.registradoPor ? record.registradoPor.correoUniversitario : null,
-        evento: record.evento || ''
+      recent: recentAttendance.map((attendance) => ({
+        attendanceId: attendance._id ? attendance._id.toString() : null,
+        activityId: attendance.actividad && attendance.actividad._id ? attendance.actividad._id.toString() : null,
+        activityTitle: attendance.actividad ? attendance.actividad.titulo : 'Actividad no disponible',
+        area: attendance.actividad ? attendance.actividad.area : null,
+        tipo: attendance.actividad ? attendance.actividad.tipo : null,
+        inscripciones: Array.isArray(attendance.inscripciones) ? attendance.inscripciones.map((ins) => ({
+          usuarioId: ins.usuario && ins.usuario._id ? ins.usuario._id.toString() : null,
+          usuarioNombre: ins.usuario ? ins.usuario.nombre : 'Usuario no disponible',
+          usuarioEmail: ins.usuario ? ins.usuario.correoUniversitario : null,
+          asistencia: ins.asistencia || 'ausente'
+        })) : [],
+        recordedAt: formatDate(attendance.fecha),
+        recordedBy: attendance.registradoPor && attendance.registradoPor._id ? attendance.registradoPor._id.toString() : null,
+        recordedByName: attendance.registradoPor ? attendance.registradoPor.nombre : null,
+        recordedByEmail: attendance.registradoPor ? attendance.registradoPor.correoUniversitario : null
       }))
     };
 
@@ -360,7 +368,7 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
   }
 });
 
-router.post('/impact-reports', ensureRole(['admin', 'staff']), async (req, res) => {
+router.post('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { actividadId, beneficiarios, notas } = req.body || {};
 
@@ -379,7 +387,7 @@ router.post('/impact-reports', ensureRole(['admin', 'staff']), async (req, res) 
       return res.status(400).json({ success: false, message: 'La actividad debe estar finalizada para generar el reporte de impacto' });
     }
 
-    const attendanceCount = await RegistroAsistencia.countDocuments({ idActividad: actividadId });
+    const attendanceCount = await Attendance.countDocuments({ actividad: actividadId });
     if (attendanceCount === 0) {
       return res.status(400).json({ success: false, message: 'No hay registros de asistencia para esta actividad' });
     }
@@ -433,34 +441,34 @@ router.post('/impact-reports', ensureRole(['admin', 'staff']), async (req, res) 
   }
 });
 
-router.get('/panel/export/enrollments', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/panel/export/enrollments', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const filters = {};
     if (req.query.estado) filters.estado = req.query.estado;
-    if (req.query.actividadId) filters.idActividad = req.query.actividadId;
+    if (req.query.actividadId) filters.actividad = req.query.actividadId;
 
-    const enrollments = await Enrollment.find(filters)
+    const inscripciones = await Inscripcion.find(filters)
       .sort({ creadoEn: -1 })
-      .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado')
-      .populate('idUsuario', 'nombre correoUniversitario rol telefono carrera')
+      .populate('actividad', 'titulo area tipo fechaInicio fechaFin estado')
+      .populate('usuario', 'nombre correoUniversitario rol telefono carrera')
       .lean();
 
-    const csv = buildCsv(enrollments, [
+    const csv = buildCsv(inscripciones, [
       { header: 'ID Inscripcion', accessor: row => (row._id ? row._id.toString() : '') },
       { header: 'Estado', accessor: row => row.estado || '' },
       { header: 'Creado En', accessor: row => formatDate(row.creadoEn) || '' },
-      { header: 'Actividad ID', accessor: row => (row.idActividad && row.idActividad._id ? row.idActividad._id.toString() : '') },
-      { header: 'Actividad', accessor: row => (row.idActividad ? row.idActividad.titulo : '') },
-      { header: 'Area', accessor: row => (row.idActividad ? row.idActividad.area : '') },
-      { header: 'Tipo', accessor: row => (row.idActividad ? row.idActividad.tipo : '') },
-      { header: 'Fecha Inicio', accessor: row => (row.idActividad ? formatDate(row.idActividad.fechaInicio) || '' : '') },
-      { header: 'Fecha Fin', accessor: row => (row.idActividad ? formatDate(row.idActividad.fechaFin) || '' : '') },
-      { header: 'Usuario ID', accessor: row => (row.idUsuario && row.idUsuario._id ? row.idUsuario._id.toString() : '') },
-      { header: 'Nombre', accessor: row => (row.idUsuario ? row.idUsuario.nombre : '') },
-      { header: 'Correo', accessor: row => (row.idUsuario ? row.idUsuario.correoUniversitario : '') },
-      { header: 'Rol', accessor: row => (row.idUsuario ? row.idUsuario.rol : '') },
-      { header: 'Telefono', accessor: row => (row.idUsuario ? row.idUsuario.telefono || '' : '') },
-      { header: 'Carrera', accessor: row => (row.idUsuario ? row.idUsuario.carrera || '' : '') }
+      { header: 'Actividad ID', accessor: row => (row.actividad && row.actividad._id ? row.actividad._id.toString() : '') },
+      { header: 'Actividad', accessor: row => (row.actividad ? row.actividad.titulo : '') },
+      { header: 'Area', accessor: row => (row.actividad ? row.actividad.area : '') },
+      { header: 'Tipo', accessor: row => (row.actividad ? row.actividad.tipo : '') },
+      { header: 'Fecha Inicio', accessor: row => (row.actividad ? formatDate(row.actividad.fechaInicio) || '' : '') },
+      { header: 'Fecha Fin', accessor: row => (row.actividad ? formatDate(row.actividad.fechaFin) || '' : '') },
+      { header: 'Usuario ID', accessor: row => (row.usuario && row.usuario._id ? row.usuario._id.toString() : '') },
+      { header: 'Nombre', accessor: row => (row.usuario ? row.usuario.nombre : '') },
+      { header: 'Correo', accessor: row => (row.usuario ? row.usuario.correoUniversitario : '') },
+      { header: 'Rol', accessor: row => (row.usuario ? row.usuario.rol : '') },
+      { header: 'Telefono', accessor: row => (row.usuario ? row.usuario.telefono || '' : '') },
+      { header: 'Carrera', accessor: row => (row.usuario ? row.usuario.carrera || '' : '') }
     ]);
 
     res.setHeader('Content-Type', 'text/csv');
@@ -476,32 +484,48 @@ router.get('/panel/export/enrollments', ensureRole(['admin', 'staff']), async (r
   }
 });
 
-router.get('/panel/export/attendance', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/panel/export/attendance', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const filters = {};
-    if (req.query.actividadId) filters.idActividad = req.query.actividadId;
-    if (req.query.usuarioId) filters.idUsuario = req.query.usuarioId;
+    if (req.query.actividadId) filters.actividad = req.query.actividadId;
 
-    const attendanceRecords = await RegistroAsistencia.find(filters)
+    const attendanceRecords = await Attendance.find(filters)
       .sort({ fecha: -1 })
-      .populate('idActividad', 'titulo area tipo')
-      .populate('idUsuario', 'nombre correoUniversitario')
+      .populate('actividad', 'titulo area tipo')
+      .populate('inscripciones.usuario', 'nombre correoUniversitario')
       .populate('registradoPor', 'nombre correoUniversitario')
       .lean();
 
-    const csv = buildCsv(attendanceRecords, [
+    // Transformar datos de attendance para CSV
+    const rows = [];
+    attendanceRecords.forEach((record) => {
+      if (Array.isArray(record.inscripciones)) {
+        record.inscripciones.forEach((ins) => {
+          rows.push({
+            _id: record._id,
+            actividad: record.actividad,
+            usuario: ins.usuario,
+            asistencia: ins.asistencia,
+            fecha: record.fecha,
+            registradoPor: record.registradoPor
+          });
+        });
+      }
+    });
+
+    const csv = buildCsv(rows, [
       { header: 'ID Registro', accessor: row => (row._id ? row._id.toString() : '') },
-      { header: 'Actividad ID', accessor: row => (row.idActividad && row.idActividad._id ? row.idActividad._id.toString() : '') },
-      { header: 'Actividad', accessor: row => (row.idActividad ? row.idActividad.titulo : '') },
-      { header: 'Area', accessor: row => (row.idActividad ? row.idActividad.area : '') },
-      { header: 'Tipo', accessor: row => (row.idActividad ? row.idActividad.tipo : '') },
-      { header: 'Usuario ID', accessor: row => (row.idUsuario && row.idUsuario._id ? row.idUsuario._id.toString() : '') },
-      { header: 'Usuario', accessor: row => (row.idUsuario ? row.idUsuario.nombre : '') },
-      { header: 'Correo Usuario', accessor: row => (row.idUsuario ? row.idUsuario.correoUniversitario : '') },
+      { header: 'Actividad ID', accessor: row => (row.actividad && row.actividad._id ? row.actividad._id.toString() : '') },
+      { header: 'Actividad', accessor: row => (row.actividad ? row.actividad.titulo : '') },
+      { header: 'Area', accessor: row => (row.actividad ? row.actividad.area : '') },
+      { header: 'Tipo', accessor: row => (row.actividad ? row.actividad.tipo : '') },
+      { header: 'Usuario ID', accessor: row => (row.usuario && row.usuario._id ? row.usuario._id.toString() : '') },
+      { header: 'Usuario', accessor: row => (row.usuario ? row.usuario.nombre : '') },
+      { header: 'Correo Usuario', accessor: row => (row.usuario ? row.usuario.correoUniversitario : '') },
+      { header: 'Asistencia', accessor: row => row.asistencia || 'ausente' },
       { header: 'Fecha', accessor: row => formatDate(row.fecha) || '' },
       { header: 'Registrado Por', accessor: row => (row.registradoPor ? row.registradoPor.nombre : '') },
-      { header: 'Correo Registrado Por', accessor: row => (row.registradoPor ? row.registradoPor.correoUniversitario : '') },
-      { header: 'Evento', accessor: row => row.evento || '' }
+      { header: 'Correo Registrado Por', accessor: row => (row.registradoPor ? row.registradoPor.correoUniversitario : '') }
     ]);
 
     res.setHeader('Content-Type', 'text/csv');
@@ -518,7 +542,7 @@ router.get('/panel/export/attendance', ensureRole(['admin', 'staff']), async (re
 });
 
 // Listar eventos para administradores y coordinadores
-router.get('/events', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/events', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const events = await Actividad.find({})
       .sort({ fechaInicio: 1 })
@@ -555,7 +579,7 @@ router.get('/events', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Listar todos los estudiantes registrados
-router.get('/students', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/students', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const students = await userModel.findAllStudents();
 
@@ -591,7 +615,7 @@ router.get('/students', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Gestion de usuarios: listar/buscar
-router.get('/users', ensureRole(['admin']), async (req, res) => {
+router.get('/users', ensureAuth, ensureRole(['admin']), async (req, res) => {
   try {
     const { search, role, blocked } = req.query || {};
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -629,7 +653,7 @@ router.get('/users', ensureRole(['admin']), async (req, res) => {
 });
 
 // Cambiar rol (student/coordinator/admin)
-router.patch('/users/:id/role', ensureRole(['admin']), async (req, res) => {
+router.patch('/users/:id/role', ensureAuth, ensureRole(['admin']), async (req, res) => {
   const newRole = req.body ? (req.body.rol || req.body.role) : null;
   const normalizedRole = userModel.normalizeRole(newRole);
   if (!normalizedRole) {
@@ -657,7 +681,7 @@ router.patch('/users/:id/role', ensureRole(['admin']), async (req, res) => {
 });
 
 // Bloquear / desbloquear acceso
-router.patch('/users/:id/block', ensureRole(['admin']), async (req, res) => {
+router.patch('/users/:id/block', ensureAuth, ensureRole(['admin']), async (req, res) => {
   const blockedValue = req.body ? (req.body.bloqueado ?? req.body.blocked) : null;
   const parsed = parseBoolean(blockedValue);
   if (parsed === null) {

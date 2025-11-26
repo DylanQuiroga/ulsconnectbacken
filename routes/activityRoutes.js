@@ -8,7 +8,7 @@ const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // Crear una nueva actividad (solo admin/staff)
-router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
+router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.crear(req.body);
     res.status(201).json({ success: true, data: actividad });
@@ -18,7 +18,7 @@ router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Obtener todas las actividades
-router.get('/', async (req, res) => {
+router.get('/', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerTodas();
     res.status(200).json({ success: true, data: actividades });
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // Buscar actividades por título y/o tipo
-router.get('/search', async (req, res) => {
+router.get('/search', ensureAuth, async (req, res) => {
   try {
     const { titulo, tipo } = req.query || {};
     const filtros = {};
@@ -50,7 +50,7 @@ router.get('/search', async (req, res) => {
 });
 
 // Obtener actividad por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', ensureAuth, async (req, res) => {
   try {
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
     if (!actividad) {
@@ -63,7 +63,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Obtener actividades por área
-router.get('/area/:area', async (req, res) => {
+router.get('/area/:area', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerPorArea(req.params.area);
     res.status(200).json({ success: true, data: actividades });
@@ -73,7 +73,7 @@ router.get('/area/:area', async (req, res) => {
 });
 
 // Obtener actividades por estado
-router.get('/estado/:estado', async (req, res) => {
+router.get('/estado/:estado', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerPorEstado(req.params.estado);
     res.status(200).json({ success: true, data: actividades });
@@ -83,7 +83,7 @@ router.get('/estado/:estado', async (req, res) => {
 });
 
 // Actualizar actividad (solo admin/staff)
-router.put('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
+router.put('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.actualizar(req.params.id, req.body);
     if (!actividad) {
@@ -96,7 +96,7 @@ router.put('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Eliminar actividad (solo admin/staff)
-router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
+router.delete('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.eliminar(req.params.id);
     if (!actividad) {
@@ -109,7 +109,7 @@ router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // CASO DE USO 9: Cerrar convocatoria (solo admin/staff)
-router.post('/:id/close', ensureRole(['admin', 'staff']), async (req, res) => {
+router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { motivo } = req.body || {};
     const motivoCierre = motivo || 'fecha_alcanzada';
