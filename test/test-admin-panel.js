@@ -168,7 +168,10 @@ async function run() {
       process.exit(1);
     }
 
-    const sessionCookie = loginRes.setCookie && loginRes.setCookie.length ? loginRes.setCookie[0].split(';')[0] : null;
+    const sessionCookieHeader = Array.isArray(loginRes.setCookie)
+      ? loginRes.setCookie.find((c) => c.startsWith('connect.sid='))
+      : null;
+    const sessionCookie = sessionCookieHeader ? sessionCookieHeader.split(';')[0] : null;
     if (!sessionCookie) {
       console.error('Missing session cookie');
       await cleanup(actividad._id, student._id);
