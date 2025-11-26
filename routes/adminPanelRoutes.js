@@ -6,6 +6,7 @@ const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'
 const Actividad = require(path.join(__dirname, '..', 'lib', 'schema', 'Actividad'));
 const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
 const RegistroAsistencia = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistroAsistencia'));
+const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
 function formatDate(value) {
   if (!value) return null;
@@ -340,6 +341,79 @@ router.get('/panel/export/attendance', ensureRole(['admin', 'staff']), async (re
     res.status(500).json({
       success: false,
       message: 'No fue posible exportar los registros de asistencia',
+      error: error.message
+    });
+  }
+});
+
+// Listar eventos para administradores y coordinadores
+router.get('/events', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const events = await Actividad.find({})
+      .sort({ fechaInicio: 1 })
+      .select('-imagen')
+      .lean();
+
+    const formatted = events.map((evt) => ({
+      id: evt._id ? evt._id.toString() : null,
+      titulo: evt.titulo,
+      area: evt.area,
+      tipo: evt.tipo,
+      fechaInicio: formatDate(evt.fechaInicio),
+      fechaFin: formatDate(evt.fechaFin),
+      estado: evt.estado,
+      capacidad: evt.capacidad,
+      ubicacion: evt.ubicacion || null,
+      creadoEn: formatDate(evt.creadoEn),
+      actualizadoEn: formatDate(evt.actualizadoEn)
+    }));
+
+    res.json({
+      success: true,
+      total: formatted.length,
+      eventos: formatted
+    });
+  } catch (error) {
+    console.error('Error al listar eventos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener los eventos',
+      error: error.message
+    });
+  }
+});
+
+// Listar todos los estudiantes registrados
+router.get('/students', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const students = await userModel.findAllStudents();
+
+    const formatted = (students || []).map((student) => ({
+      id: student._id ? student._id.toString() : null,
+      nombre: student.nombre,
+      correoUniversitario: student.correoUniversitario,
+      telefono: student.telefono || null,
+      carrera: student.carrera || '',
+      intereses: Array.isArray(student.intereses) ? student.intereses : [],
+      comuna: student.comuna || '',
+      direccion: student.direccion || '',
+      edad: student.edad || null,
+      status: student.status || '',
+      rol: student.rol || student.role || 'estudiante',
+      creadoEn: formatDate(student.creadoEn),
+      actualizadoEn: formatDate(student.actualizadoEn)
+    }));
+
+    res.json({
+      success: true,
+      total: formatted.length,
+      estudiantes: formatted
+    });
+  } catch (error) {
+    console.error('Error al listar estudiantes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener los estudiantes registrados',
       error: error.message
     });
   }
