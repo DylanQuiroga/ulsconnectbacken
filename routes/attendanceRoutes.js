@@ -5,6 +5,7 @@ const router = express.Router();
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
 const AttendanceModel = require(path.join(__dirname, '..', 'lib', 'AttendanceModel'));
+const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendance'));
 
 // POST /attendance/create
 // Body: { actividadId: "..." }
@@ -66,6 +67,25 @@ router.post('/update', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     console.error('update attendance entries error:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /attendance/refresh
+// Body: { attendanceId: "..." }
+// Refreshes the attendance list by fetching active enrollments for the activity
+router.post('/refresh', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const attendanceId = req.body && (req.body.attendanceId);
+    if (!attendanceId) return res.status(400).json({ success: false, message: 'attendanceId requerido' });
+
+    const sessionUser = req.session && req.session.user;
+    const userId = sessionUser ? sessionUser.id : null;
+
+    const updated = await AttendanceModel.refreshAttendanceList(attendanceId, userId);
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    console.error('refresh attendance error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 });
