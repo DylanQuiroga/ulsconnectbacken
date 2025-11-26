@@ -71,40 +71,21 @@ router.post('/update', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
   }
 });
 
-// DELETE /attendance/delete
-// Params: { attendanceId, actividadId }
-// Deletes the attendance list and creates a new one with the same actividadId
-router.delete('/delete/:attendanceId/:actividadId', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+// POST /attendance/refresh
+// Body: { attendanceId: "..." }
+// Refreshes the attendance list by fetching active enrollments for the activity
+router.post('/refresh', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    const { attendanceId, actividadId } = req.params;
-
-    console.log('Delete attendance called with attendanceId:', attendanceId, 'and actividadId:', actividadId);
-
+    const attendanceId = req.body && (req.body.attendanceId);
     if (!attendanceId) return res.status(400).json({ success: false, message: 'attendanceId requerido' });
-    if (!actividadId) return res.status(400).json({ success: false, message: 'actividadId requerido' });
-
-    // Get the attendance record to verify it belongs to the provided actividadId
-    const attendance = await Attendance.findById(attendanceId);
-
-    if (!attendance) return res.status(404).json({ success: false, message: 'Registro de asistencia no encontrado' });
-
-    // Verify that the actividadId matches the attendance's actividadId
-    if (attendance.actividad.toString() !== actividadId.toString()) {
-      return res.status(403).json({ success: false, message: 'El id de actividad no coincide con el registro de asistencia' });
-    }
 
     const sessionUser = req.session && req.session.user;
     const userId = sessionUser ? sessionUser.id : null;
 
-    // Delete the attendance list
-    await Attendance.findByIdAndDelete(attendanceId);
-
-    // Create a new attendance list with the same actividadId
-    const newAttendance = await AttendanceModel.createAttendanceList(actividadId, userId);
-
-    return res.status(200).json({ success: true, message: 'Lista de asistencia eliminada y recreada', data: newAttendance });
+    const updated = await AttendanceModel.refreshAttendanceList(attendanceId, userId);
+    return res.status(200).json({ success: true, data: updated });
   } catch (err) {
-    console.error('delete attendance error:', err);
+    console.error('refresh attendance error:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 });
