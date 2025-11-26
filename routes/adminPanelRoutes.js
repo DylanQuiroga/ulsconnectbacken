@@ -6,6 +6,7 @@ const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'
 const Actividad = require(path.join(__dirname, '..', 'lib', 'schema', 'Actividad'));
 const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
 const RegistroAsistencia = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistroAsistencia'));
+const ReporteImpacto = require(path.join(__dirname, '..', 'lib', 'schema', 'ReporteImpacto'));
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
 function formatDate(value) {
@@ -39,6 +40,39 @@ function buildCsv(rows, columns) {
   return [header, ...lines].join('\n');
 }
 
+function calculateTotalHours(actividad, attendedCount) {
+  if (!actividad || !actividad.fechaInicio || !actividad.fechaFin) return 0;
+  const start = new Date(actividad.fechaInicio);
+  const end = new Date(actividad.fechaFin);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || attendedCount <= 0) return 0;
+  const durationHours = (end - start) / (1000 * 60 * 60);
+  return Number((durationHours * attendedCount).toFixed(2));
+}
+
+async function computeImpactMetrics(actividadId, actividadDoc = null) {
+  const [totalInvitados, totalConfirmados, registrosAsistencia] = await Promise.all([
+    Enrollment.countDocuments({ idActividad: actividadId }),
+    Enrollment.countDocuments({ idActividad: actividadId, estado: 'confirmado' }),
+    RegistroAsistencia.find({ idActividad: actividadId }).select('idUsuario').lean()
+  ]);
+
+  const asistentesSet = new Set(
+    registrosAsistencia
+      .map((reg) => (reg.idUsuario ? reg.idUsuario.toString() : null))
+      .filter(Boolean)
+  );
+
+  const voluntariosAsistieron = asistentesSet.size;
+  const horasTotales = calculateTotalHours(actividadDoc, voluntariosAsistieron);
+
+  return {
+    voluntariosInvitados: totalInvitados,
+    voluntariosConfirmados: totalConfirmados,
+    voluntariosAsistieron,
+    horasTotales
+  };
+}
+
 router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const now = new Date();
@@ -56,7 +90,8 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
       enrollmentTotal,
       attendanceTotal,
       attendanceTopActivities,
-      recentAttendance
+      recentAttendance,
+      impactReports
     ] = await Promise.all([
       Actividad.aggregate([
         {
@@ -157,6 +192,12 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         .populate('idActividad', 'titulo area tipo')
         .populate('idUsuario', 'nombre correoUniversitario')
         .populate('registradoPor', 'nombre correoUniversitario')
+        .lean(),
+      ReporteImpacto.find({})
+        .sort({ creadoEn: -1 })
+        .limit(20)
+        .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado')
+        .populate('creadoPor', 'nombre correoUniversitario rol')
         .lean()
     ]);
 
@@ -233,6 +274,33 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
       }))
     };
 
+    const impactReportsFormatted = impactReports.map((report) => ({
+      reportId: report._id ? report._id.toString() : null,
+      activityId: report.idActividad && report.idActividad._id ? report.idActividad._id.toString() : null,
+      activityTitle: report.idActividad ? report.idActividad.titulo : 'Actividad no disponible',
+      area: report.idActividad ? report.idActividad.area : null,
+      tipo: report.idActividad ? report.idActividad.tipo : null,
+      activityStartDate: report.idActividad ? formatDate(report.idActividad.fechaInicio) : null,
+      activityEndDate: report.idActividad ? formatDate(report.idActividad.fechaFin) : null,
+      activityStatus: report.idActividad ? report.idActividad.estado : null,
+      metricas: {
+        invitados: report.metricas ? report.metricas.voluntariosInvitados : 0,
+        confirmados: report.metricas ? report.metricas.voluntariosConfirmados : 0,
+        asistentes: report.metricas ? report.metricas.voluntariosAsistieron : 0,
+        horasTotales: report.metricas ? report.metricas.horasTotales : 0,
+        beneficiarios: report.metricas ? report.metricas.beneficiarios : null,
+        notas: report.metricas ? report.metricas.notas : null
+      },
+      createdAt: formatDate(report.creadoEn),
+      updatedAt: formatDate(report.actualizadoEn),
+      createdBy: report.creadoPor ? {
+        id: report.creadoPor._id ? report.creadoPor._id.toString() : null,
+        nombre: report.creadoPor.nombre,
+        correo: report.creadoPor.correoUniversitario,
+        rol: report.creadoPor.rol
+      } : null
+    }));
+
     res.json({
       success: true,
       panel: {
@@ -246,6 +314,7 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
         metrics,
         enrollments: enrollmentSummary,
         attendance: attendanceSummary,
+        impactReports: impactReportsFormatted,
         exports: {
           enrollmentsCsv: '/admin/panel/export/enrollments',
           attendanceCsv: '/admin/panel/export/attendance'
@@ -257,6 +326,79 @@ router.get('/panel', ensureRole(['admin', 'staff']), async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al cargar el panel del administrador',
+      error: error.message
+    });
+  }
+});
+
+router.post('/impact-reports', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const { actividadId, beneficiarios, notas } = req.body || {};
+
+    if (!actividadId) {
+      return res.status(400).json({ success: false, message: 'actividadId requerido' });
+    }
+
+    const actividad = await Actividad.findById(actividadId);
+    if (!actividad) {
+      return res.status(404).json({ success: false, message: 'Actividad no encontrada' });
+    }
+
+    const now = new Date();
+    const actividadFinalizada = actividad.estado === 'closed' || (actividad.fechaFin && new Date(actividad.fechaFin) <= now);
+    if (!actividadFinalizada) {
+      return res.status(400).json({ success: false, message: 'La actividad debe estar finalizada para generar el reporte de impacto' });
+    }
+
+    const attendanceCount = await RegistroAsistencia.countDocuments({ idActividad: actividadId });
+    if (attendanceCount === 0) {
+      return res.status(400).json({ success: false, message: 'No hay registros de asistencia para esta actividad' });
+    }
+
+    const existingReport = await ReporteImpacto.findOne({ idActividad: actividadId });
+    if (existingReport) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ya existe un reporte de impacto para esta actividad',
+        reporte: existingReport
+      });
+    }
+
+    const beneficiariosNumber = beneficiarios === undefined || beneficiarios === null ? null : Number(beneficiarios);
+    if (beneficiariosNumber !== null && (Number.isNaN(beneficiariosNumber) || beneficiariosNumber < 0)) {
+      return res.status(400).json({ success: false, message: 'beneficiarios debe ser un numero mayor o igual a cero' });
+    }
+
+    const notasValue = notas === undefined || notas === null ? null : String(notas);
+    const metricasCalculadas = await computeImpactMetrics(actividadId, actividad);
+
+    const sessionUserId = req.session && req.session.user ? req.session.user.id : null;
+    if (!sessionUserId) {
+      return res.status(401).json({ success: false, message: 'Sesion no disponible' });
+    }
+
+    const reporte = new ReporteImpacto({
+      idActividad: actividadId,
+      metricas: {
+        ...metricasCalculadas,
+        beneficiarios: beneficiariosNumber,
+        notas: notasValue
+      },
+      creadoPor: sessionUserId
+    });
+
+    await reporte.save();
+
+    return res.status(201).json({
+      success: true,
+      message: 'Reporte de impacto generado correctamente',
+      reporte
+    });
+  } catch (error) {
+    console.error('Error al generar reporte de impacto:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'No fue posible generar el reporte de impacto',
       error: error.message
     });
   }
