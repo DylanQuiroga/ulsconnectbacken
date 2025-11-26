@@ -40,6 +40,35 @@ function buildCsv(rows, columns) {
   return [header, ...lines].join('\n');
 }
 
+function parseBoolean(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'si', 'yes', 'y', 't'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'f'].includes(normalized)) return false;
+  return null;
+}
+
+function formatUser(user) {
+  if (!user) return null;
+  return {
+    id: user._id ? user._id.toString() : null,
+    nombre: user.nombre,
+    correoUniversitario: user.correoUniversitario,
+    telefono: user.telefono || null,
+    carrera: user.carrera || '',
+    intereses: Array.isArray(user.intereses) ? user.intereses : [],
+    comuna: user.comuna || '',
+    direccion: user.direccion || '',
+    edad: user.edad || null,
+    status: user.status || '',
+    rol: user.rol || user.role || null,
+    bloqueado: Boolean(user.bloqueado),
+    creadoEn: formatDate(user.creadoEn),
+    actualizadoEn: formatDate(user.actualizadoEn)
+  };
+}
+
 function calculateTotalHours(actividad, attendedCount) {
   if (!actividad || !actividad.fechaInicio || !actividad.fechaFin) return 0;
   const start = new Date(actividad.fechaInicio);
@@ -556,6 +585,100 @@ router.get('/students', ensureRole(['admin', 'staff']), async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'No fue posible obtener los estudiantes registrados',
+      error: error.message
+    });
+  }
+});
+
+// Gestion de usuarios: listar/buscar
+router.get('/users', ensureRole(['admin']), async (req, res) => {
+  try {
+    const { search, role, blocked } = req.query || {};
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const skip = (page - 1) * limit;
+
+    const blockedFilter = parseBoolean(blocked);
+    const normalizedRole = userModel.normalizeRole(role);
+
+    const { users, total } = await userModel.listUsers({
+      search: search || '',
+      role: normalizedRole,
+      blocked: blockedFilter,
+      limit,
+      skip
+    });
+
+    const formatted = (users || []).map(formatUser);
+
+    res.json({
+      success: true,
+      total,
+      page,
+      pageSize: formatted.length,
+      usuarios: formatted
+    });
+  } catch (error) {
+    console.error('Error al listar usuarios:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener los usuarios',
+      error: error.message
+    });
+  }
+});
+
+// Cambiar rol (student/coordinator/admin)
+router.patch('/users/:id/role', ensureRole(['admin']), async (req, res) => {
+  const newRole = req.body ? (req.body.rol || req.body.role) : null;
+  const normalizedRole = userModel.normalizeRole(newRole);
+  if (!normalizedRole) {
+    return res.status(400).json({ success: false, message: 'Rol invalido. Use estudiante, staff/coordinator o admin' });
+  }
+
+  try {
+    const updated = await userModel.updateRole(req.params.id, normalizedRole);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+    res.json({
+      success: true,
+      message: 'Rol actualizado correctamente',
+      usuario: formatUser(updated)
+    });
+  } catch (error) {
+    console.error('Error al actualizar rol:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible actualizar el rol',
+      error: error.message
+    });
+  }
+});
+
+// Bloquear / desbloquear acceso
+router.patch('/users/:id/block', ensureRole(['admin']), async (req, res) => {
+  const blockedValue = req.body ? (req.body.bloqueado ?? req.body.blocked) : null;
+  const parsed = parseBoolean(blockedValue);
+  if (parsed === null) {
+    return res.status(400).json({ success: false, message: 'Debe indicar blocked/bloqueado como true o false' });
+  }
+
+  try {
+    const updated = await userModel.setBlocked(req.params.id, parsed);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+    res.json({
+      success: true,
+      message: parsed ? 'Usuario bloqueado' : 'Usuario desbloqueado',
+      usuario: formatUser(updated)
+    });
+  } catch (error) {
+    console.error('Error al cambiar estado de bloqueo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible actualizar el estado de acceso',
       error: error.message
     });
   }
