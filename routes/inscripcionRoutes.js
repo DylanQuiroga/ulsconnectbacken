@@ -24,7 +24,7 @@ router.post('/:actividadId',  ensureAuth, async (req, res) => {
 });
 
 // Obtener inscripciones del usuario
-router.get('/:usuarioId', async (req, res) => {
+router.get('/:usuarioId', ensureAuth, async (req, res) => {
   try {
     const { usuarioId } = req.params;
     const inscripciones = await InscripcionModel.obtenerPorUsuario(usuarioId);
@@ -35,7 +35,7 @@ router.get('/:usuarioId', async (req, res) => {
 });
 
 // Obtener inscripciones activas del usuario
-router.get('/:usuarioId/activas', async (req, res) => {
+router.get('/:usuarioId/activas', ensureAuth, async (req, res) => {
   try {
     const { usuarioId } = req.params;
     const inscripciones = await InscripcionModel.obtenerActivas(usuarioId);
@@ -46,7 +46,7 @@ router.get('/:usuarioId/activas', async (req, res) => {
 });
 
 // Obtener inscripciones de una actividad (solo admin/staff)
-router.get('/actividad/:actividadId', ensureRole(['admin', 'staff']), async (req, res) => {
+router.get('/actividad/:actividadId', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const inscripciones = await InscripcionModel.obtenerPorActividad(req.params.actividadId);
     res.status(200).json({ success: true, data: inscripciones });
@@ -56,7 +56,7 @@ router.get('/actividad/:actividadId', ensureRole(['admin', 'staff']), async (req
 });
 
 // Obtener una inscripción por ID
-router.get('/detalle/:id', async (req, res) => {
+router.get('/detalle/:id', ensureAuth, async (req, res) => {
   try {
     const inscripcion = await InscripcionModel.obtenerPorId(req.params.id);
     if (!inscripcion) {

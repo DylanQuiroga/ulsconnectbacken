@@ -3,7 +3,7 @@ const path = require('path');
 const router = express.Router();
 
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema', 'Enrollment'));
+const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
 
 /**
  * Normaliza fechas para evitar exponer objetos Date directos en la respuesta.
@@ -36,32 +36,18 @@ router.get('/panel', ensureAuth, async (req, res) => {
     }
 
     const userId = sessionUser.id;
-    const enrollments = await Enrollment.find({ idUsuario: userId })
+    const inscripciones = await Inscripcion.find({ usuario: userId })
       .populate({
-        path: 'idActividad',
+        path: 'actividad',
         select: 'titulo tipo area fechaInicio fechaFin estado ubicacion'
       })
       .lean();
 
-    const detailedEnrollments = enrollments.map((enrollment) => {
-      const actividad = enrollment.idActividad || null;
-      const attendances = Array.isArray(enrollment.registrosAsistencia) ? enrollment.registrosAsistencia : [];
-      const sortedAttendances = attendances
-        .map((registro) => ({
-          date: formatDate(registro.fecha),
-          metodo: registro.metodo || '',
-          registradoPor: registro.registradoPor ? registro.registradoPor.toString() : null
-        }))
-        .sort((a, b) => {
-          const aDate = a.date ? new Date(a.date) : new Date(0);
-          const bDate = b.date ? new Date(b.date) : new Date(0);
-          return aDate - bDate;
-        });
-
-      const lastAttendance = sortedAttendances.length ? sortedAttendances[sortedAttendances.length - 1].date : null;
+    const detailedInscripciones = inscripciones.map((inscripcion) => {
+      const actividad = inscripcion.actividad || null;
 
       return {
-        enrollmentId: enrollment._id ? enrollment._id.toString() : null,
+        inscripcionId: inscripcion._id ? inscripcion._id.toString() : null,
         activityId: actividad && actividad._id ? actividad._id.toString() : null,
         activityTitle: actividad ? actividad.titulo : 'Actividad no disponible',
         activityType: actividad ? actividad.tipo : null,
@@ -74,16 +60,13 @@ router.get('/panel', ensureAuth, async (req, res) => {
         startDate: actividad ? formatDate(actividad.fechaInicio) : null,
         endDate: actividad ? formatDate(actividad.fechaFin) : null,
         activityStatus: actividad ? actividad.estado : null,
-        enrollmentStatus: enrollment.estado,
-        attendanceCount: sortedAttendances.length,
-        lastAttendanceAt: lastAttendance,
-        attendances: sortedAttendances
+        inscripcionStatus: inscripcion.estado
       };
     });
 
     const now = new Date();
-    const upcoming = detailedEnrollments
-      .filter((enrollmentDetail) => isUpcomingActivity(enrollmentDetail, now))
+    const upcoming = detailedInscripciones
+      .filter((inscripcionDetail) => isUpcomingActivity(inscripcionDetail, now))
       .sort((a, b) => {
         const aDate = a.startDate || a.endDate;
         const bDate = b.startDate || b.endDate;
@@ -93,9 +76,8 @@ router.get('/panel', ensureAuth, async (req, res) => {
       });
 
     const summary = {
-      totalEnrollments: detailedEnrollments.length,
-      upcomingEnrollments: upcoming.length,
-      totalAttendances: detailedEnrollments.reduce((total, enrollmentDetail) => total + enrollmentDetail.attendanceCount, 0)
+      totalInscripciones: detailedInscripciones.length,
+      upcomingInscripciones: upcoming.length
     };
 
     res.json({
@@ -103,7 +85,7 @@ router.get('/panel', ensureAuth, async (req, res) => {
       panel: {
         summary,
         upcoming,
-        enrollments: detailedEnrollments
+        inscripciones: detailedInscripciones
       }
     });
   } catch (error) {

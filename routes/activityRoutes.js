@@ -3,12 +3,12 @@ const path = require('path');
 const router = express.Router();
 const ActividadModel = require(path.join(__dirname, '..', 'lib', 'activityModel'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
-const Enrollment = require(path.join(__dirname, '..', 'lib', 'schema/Enrollment'));
+const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // Crear una nueva actividad (solo admin/staff)
-router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
+router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.crear(req.body);
     res.status(201).json({ success: true, data: actividad });
@@ -18,7 +18,7 @@ router.post('/create', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Obtener todas las actividades
-router.get('/', async (req, res) => {
+router.get('/', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerTodas();
     res.status(200).json({ success: true, data: actividades });
@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // Buscar actividades por título y/o tipo
-router.get('/search', async (req, res) => {
+router.get('/search', ensureAuth, async (req, res) => {
   try {
     const { titulo, tipo } = req.query || {};
     const filtros = {};
@@ -50,7 +50,7 @@ router.get('/search', async (req, res) => {
 });
 
 // Obtener actividad por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', ensureAuth, async (req, res) => {
   try {
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
     if (!actividad) {
@@ -63,7 +63,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Obtener actividades por área
-router.get('/area/:area', async (req, res) => {
+router.get('/area/:area', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerPorArea(req.params.area);
     res.status(200).json({ success: true, data: actividades });
@@ -73,7 +73,7 @@ router.get('/area/:area', async (req, res) => {
 });
 
 // Obtener actividades por estado
-router.get('/estado/:estado', async (req, res) => {
+router.get('/estado/:estado', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerPorEstado(req.params.estado);
     res.status(200).json({ success: true, data: actividades });
@@ -82,79 +82,8 @@ router.get('/estado/:estado', async (req, res) => {
   }
 });
 
-// ✅ CORREGIDO: ENROLL - Inscribirse en una actividad (requiere autenticación)
-router.post('/:id/enroll', ensureAuth, async (req, res) => {
-  try {
-    // ✅ Obtener userId de la sesión (NO del body)
-    const sessionUser = req.session && req.session.user;
-    if (!sessionUser || !sessionUser.id) {
-      return res.status(401).json({ success: false, error: 'No autenticado' });
-    }
-
-    const idUsuario = sessionUser.id;
-    const { respuestas } = req.body || {};
-
-    console.log('📝 Inscripción recibida:', {
-      activityId: req.params.id,
-      userId: idUsuario,
-      sessionData: sessionUser
-    });
-
-    // Obtener actividad
-    const actividad = await ActividadModel.obtenerPorId(req.params.id);
-    if (!actividad) {
-      return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
-    }
-
-    // VALIDAR: Si actividad está cerrada, rechazar inscripción
-    if (actividad.estado === 'closed') {
-      return res.status(400).json({
-        success: false,
-        error: 'La convocatoria para esta actividad está cerrada',
-        motivo: actividad.motivoCierre,
-        fechaCierre: actividad.fechaCierre
-      });
-    }
-
-    // Verificar si ya está inscrito
-    const yaInscrito = await Enrollment.findOne({
-      idActividad: req.params.id,
-      idUsuario: idUsuario
-    });
-
-    if (yaInscrito) {
-      return res.status(409).json({
-        success: false,
-        error: 'Ya estás inscrito en esta actividad',
-        enrollment: yaInscrito
-      });
-    }
-
-    // Crear inscripción
-    const nuevaInscripcion = new Enrollment({
-      idActividad: req.params.id,
-      idUsuario: idUsuario,
-      estado: 'inscrito',
-      respuestas: respuestas || {}
-    });
-
-    await nuevaInscripcion.save();
-
-    console.log('✅ Inscripción creada:', nuevaInscripcion);
-
-    res.status(201).json({
-      success: true,
-      message: 'Inscripción realizada correctamente',
-      data: nuevaInscripcion
-    });
-  } catch (error) {
-    console.error('❌ Error en inscripción:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Actualizar actividad (solo admin/staff)
-router.put('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
+router.put('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.actualizar(req.params.id, req.body);
     if (!actividad) {
@@ -167,7 +96,7 @@ router.put('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // Eliminar actividad (solo admin/staff)
-router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
+router.delete('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.eliminar(req.params.id);
     if (!actividad) {
@@ -180,10 +109,11 @@ router.delete('/:id', ensureRole(['admin', 'staff']), async (req, res) => {
 });
 
 // CASO DE USO 9: Cerrar convocatoria (solo admin/staff)
-router.post('/:id/close', ensureRole(['admin', 'staff']), async (req, res) => {
+router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { motivo } = req.body || {};
     const motivoCierre = motivo || 'fecha_alcanzada';
+    const idActividad = req.params.id;
 
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
     if (!actividad) {
@@ -196,26 +126,26 @@ router.post('/:id/close', ensureRole(['admin', 'staff']), async (req, res) => {
 
     const actividadCerrada = await ActividadModel.cerrarConvocatoria(req.params.id, motivoCierre);
 
-    const inscritosPendientes = await Enrollment.find({
-      idActividad: req.params.id,
-      estado: { $ne: 'confirmado' }
-    }).populate('idUsuario', 'correoUniversitario nombre');
+    const inscritosPendientes = await Inscripcion.find({
+      actividad: idActividad,
+      estado: 'activa'
+    }).populate('usuario', 'correoUniversitario nombre');
 
-    await Enrollment.updateMany(
-      { idActividad: req.params.id, estado: 'inscrito' },
-      { estado: 'pendiente_cierre' }
+    await Inscripcion.updateMany(
+      { actividad: req.params.id, estado: 'activa' },
+      { estado: 'terminada' }
     );
 
     const emailsEnviados = [];
     for (const inscrito of inscritosPendientes) {
-      if (inscrito.idUsuario && inscrito.idUsuario.correoUniversitario) {
+      if (inscrito.usuario && inscrito.usuario.correoUniversitario) {
         await sendActivityClosedNotification(
-          inscrito.idUsuario.correoUniversitario,
-          inscrito.idUsuario.nombre,
+          inscrito.usuario.correoUniversitario,
+          inscrito.usuario.nombre,
           actividad.titulo,
           motivoCierre
         );
-        emailsEnviados.push(inscrito.idUsuario.correoUniversitario);
+        emailsEnviados.push(inscrito.usuario.correoUniversitario);
       }
     }
 
