@@ -17,6 +17,12 @@ module.exports = function ensureRole(allowedRoles) {
     try {
       // Try to read fresh user record from DB
       const fresh = await userModel.findById(sessionUser.id);
+      if (fresh && fresh.bloqueado) {
+        if (req.session && typeof req.session.destroy === 'function') {
+          req.session.destroy(() => {});
+        }
+        return res.status(403).json({ message: 'Cuenta bloqueada' });
+      }
       const role = fresh && (fresh.rol || fresh.role) ? (fresh.rol || fresh.role) : sessionUser.role;
       if (!role) {
         return res.status(401).json({ message: 'Unauthorized' });

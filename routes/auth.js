@@ -9,7 +9,7 @@ const { sendPasswordResetEmail } = require(path.join(__dirname, '..', 'lib', 'em
 // GET /signup - Returns instructions for signup (JSON API info)
 router.get('/signup', (req, res) => {
     res.json({
-        message: 'Para registrarse, envíe un POST a /signup con correoUniversitario, contrasena, nombre, y opcionalmente telefono, carrera, intereses, comuna, direccion, edad, status',
+        message: 'Para registrarse, envie un POST a /signup con correoUniversitario, contrasena, nombre, y opcionalmente telefono, carrera, intereses, comuna, direccion, edad, status',
         endpoint: 'POST /signup',
         requiredFields: ['correoUniversitario', 'contrasena', 'nombre'],
         optionalFields: ['telefono', 'carrera', 'intereses', 'comuna', 'direccion', 'edad', 'status']
@@ -20,26 +20,22 @@ router.get('/signup', (req, res) => {
 router.post('/signup', async (req, res) => {
     const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
 
-    // Validate required fields
     if (!correoUniversitario || !contrasena || !nombre) {
-        return res.status(400).json({ success: false, message: 'Correo, nombre y contraseña son requeridos' });
+        return res.status(400).json({ success: false, message: 'Correo, nombre y contrasena son requeridos' });
     }
 
     try {
-        // Prevent creating user immediately. Check if user already exists
         const existing = await userModel.findByCorreo(correoUniversitario);
         if (existing) {
             return res.status(409).json({ success: false, message: 'El usuario ya existe' });
         }
 
-        // Check for existing pending request
-        const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'models', 'RegistrationRequest'));
+        const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistrationRequest'));
         const pending = await RegistrationRequest.findOne({ correoUniversitario });
         if (pending && pending.status === 'pending') {
             return res.status(409).json({ success: false, message: 'Ya existe una solicitud pendiente para este correo' });
         }
 
-        // Hash password and create request
         const bcrypt = require('bcryptjs');
         const hash = await bcrypt.hash(contrasena, 10);
 
@@ -53,12 +49,11 @@ router.post('/signup', async (req, res) => {
             comuna: comuna || '',
             direccion: direccion || '',
             edad: edad || null,
-            // ensure valid enum value when not provided
             status: status || 'pending'
         });
         await reqDoc.save();
 
-        res.status(201).json({ success: true, message: 'Solicitud de registro enviada. Un administrador revisará su cuenta.', registrationRequestId: reqDoc._id });
+        res.status(201).json({ success: true, message: 'Solicitud de registro enviada. Un administrador revisara su cuenta.', registrationRequestId: reqDoc._id });
     } catch (err) {
         console.error('Signup error:', err);
         res.status(500).json({ success: false, message: 'Error en el registro', error: err.message });
@@ -68,7 +63,7 @@ router.post('/signup', async (req, res) => {
 // GET /login - Returns instructions for login (JSON API info)
 router.get('/login', (req, res) => {
     res.json({
-        message: 'Para iniciar sesión, envíe un POST a /login con correoUniversitario y contrasena',
+        message: 'Para iniciar sesion, envie un POST a /login con correoUniversitario y contrasena',
         endpoint: 'POST /login',
         requiredFields: ['correoUniversitario', 'contrasena']
     });
@@ -79,16 +74,23 @@ router.post('/login', async (req, res) => {
     const { correoUniversitario, contrasena } = req.body || {};
 
     if (!correoUniversitario || !contrasena) {
-        return res.status(400).json({ success: false, message: 'Correo y contraseña requeridos' });
+        return res.status(400).json({ success: false, message: 'Correo y contrasena requeridos' });
     }
 
     try {
-        const ok = await userModel.comparePassword(correoUniversitario, contrasena);
-        if (!ok) {
-            return res.status(401).json({ success: false, message: 'Correo o contraseña inválidos' });
+        const user = await userModel.findByCorreo(correoUniversitario);
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Correo o contrasena invalidos' });
         }
 
-        const user = await userModel.findByCorreo(correoUniversitario);
+        if (user.bloqueado) {
+            return res.status(403).json({ success: false, message: 'La cuenta esta bloqueada, contacte al administrador' });
+        }
+
+        const ok = await userModel.comparePassword(correoUniversitario, contrasena);
+        if (!ok) {
+            return res.status(401).json({ success: false, message: 'Correo o contrasena invalidos' });
+        }
 
         req.session.user = {
             id: user._id,
@@ -99,12 +101,12 @@ router.post('/login', async (req, res) => {
 
         res.json({
             success: true,
-            message: 'Sesión iniciada correctamente',
+            message: 'Sesion iniciada correctamente',
             user: req.session.user
         });
     } catch (err) {
         console.error('Login error:', err);
-        res.status(500).json({ success: false, message: 'Error en inicio de sesión', error: err.message });
+        res.status(500).json({ success: false, message: 'Error en inicio de sesion', error: err.message });
     }
 });
 
@@ -296,11 +298,10 @@ router.put('/profile', ensureAuth, async (req, res) => {
 router.get('/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
-            return res.status(500).json({ success: false, message: 'Error cerrando sesión', error: err.message });
+            return res.status(500).json({ success: false, message: 'Error cerrando sesion', error: err.message });
         }
-        res.json({ success: true, message: 'Sesión cerrada correctamente' });
+        res.json({ success: true, message: 'Sesion cerrada correctamente' });
     });
 });
 
 module.exports = router;
-

@@ -5,8 +5,8 @@ const bcrypt = require('bcryptjs');
 require('../app');
 
 const db = require('../lib/db');
-const Usuario = require('../lib/models/Usuario');
-const PasswordResetToken = require('../lib/models/PasswordResetToken');
+const Usuario = require('../lib/schema/Usuario');
+const PasswordResetToken = require('../lib/schema/PasswordResetToken');
 const passwordResetService = require('../lib/passwordResetService');
 
 const TEST_EMAIL = 'password.reset@test.userena.cl';

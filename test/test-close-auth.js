@@ -12,7 +12,7 @@ const USER_NAME = 'Admin Test';
 
 async function ensureAdmin() {
   const mongoose = require('../lib/db').mongoose;
-  const Usuario = require('../lib/models/Usuario');
+  const Usuario = require('../lib/schema/Usuario');
   await require('../lib/db').connect();
 
   let user = await Usuario.findOne({ correoUniversitario: USER_EMAIL });
@@ -71,7 +71,12 @@ async function run() {
       console.error('No session cookie returned');
       process.exit(1);
     }
-    const sessionCookie = loginRes.setCookie[0].split(';')[0];
+    const sessionCookieHeader = loginRes.setCookie.find((c) => c.startsWith('connect.sid='));
+    const sessionCookie = sessionCookieHeader ? sessionCookieHeader.split(';')[0] : null;
+    if (!sessionCookie) {
+      console.error('Missing connect.sid cookie');
+      process.exit(1);
+    }
 
     // Create a new activity so we can close it
     const actividadPayload = {

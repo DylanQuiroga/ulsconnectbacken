@@ -6,9 +6,9 @@ const bcrypt = require('bcryptjs');
 require('../app');
 
 const db = require('../lib/db');
-const Usuario = require('../lib/models/Usuario');
-const Actividad = require('../lib/models/Actividad');
-const Enrollment = require('../lib/models/Enrollment');
+const Usuario = require('../lib/schema/Usuario');
+const Actividad = require('../lib/schema/Actividad');
+const Enrollment = require('../lib/schema/Enrollment');
 
 const TEST_EMAIL = 'volunteer.panel@test.userena.cl';
 const TEST_PASSWORD = 'PanelPass123!';
@@ -129,7 +129,10 @@ async function run() {
       console.error('Login failed', loginRes.body);
       process.exit(1);
     }
-    const sessionCookie = loginRes.setCookie && loginRes.setCookie.length ? loginRes.setCookie[0].split(';')[0] : null;
+    const sessionCookieHeader = Array.isArray(loginRes.setCookie)
+      ? loginRes.setCookie.find((c) => c.startsWith('connect.sid='))
+      : null;
+    const sessionCookie = sessionCookieHeader ? sessionCookieHeader.split(';')[0] : null;
     if (!sessionCookie) {
       console.error('Missing session cookie');
       process.exit(1);
