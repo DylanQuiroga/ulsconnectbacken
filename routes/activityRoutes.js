@@ -5,6 +5,8 @@ const ActividadModel = require(path.join(__dirname, '..', 'lib', 'activityModel'
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
 const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
+const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendance'));
+const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
 // Crear una nueva actividad (solo admin/staff)
@@ -157,6 +159,81 @@ router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req
         inscritosPendientesNotificados: inscritosPendientes.length,
         emailsEnviados: emailsEnviados,
         motivo: motivoCierre
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Calcular y aplicar puntuaciones segun asistencia (solo admin/staff)
+router.post('/:id/puntuar', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const actividadId = req.params.id;
+    const sessionUserId = req.session?.user?.id || null;
+    const reglas = (req.body && req.body.reglas) || {};
+
+    const parseRule = (value, fallback) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+
+    const puntosPorEstado = {
+      presente: parseRule(reglas.presente, 10),
+      justificada: parseRule(reglas.justificada, 2),
+      ausente: parseRule(reglas.ausente, -5)
+    };
+
+    const attendance = await Attendance.findOne({ actividad: actividadId }).lean();
+    if (!attendance) {
+      return res.status(404).json({ success: false, error: 'No hay registro de asistencia para esta actividad' });
+    }
+
+    const resultados = [];
+    for (const entry of attendance.inscripciones || []) {
+      const userId = entry && entry.usuario ? entry.usuario.toString() : null;
+      if (!userId) continue;
+
+      const estado = entry.asistencia || 'ausente';
+      const delta = puntosPorEstado[estado];
+
+      if (!Number.isFinite(delta) || delta === 0) {
+        resultados.push({
+          usuario: userId,
+          asistencia: estado,
+          puntosAplicados: 0,
+          aplicado: false,
+          motivo: 'Puntaje configurado en 0 o no numerico'
+        });
+        continue;
+      }
+
+      const result = await userModel.adjustScore(userId, delta, {
+        motivo: `Asistencia en actividad ${actividadId}`,
+        actividadId,
+        registradoPor: sessionUserId,
+        dedupeByActivity: true
+      });
+
+      resultados.push({
+        usuario: userId,
+        asistencia: estado,
+        puntosAplicados: result.applied ? delta : 0,
+        aplicado: Boolean(result.applied),
+        encontrado: Boolean(result.user)
+      });
+    }
+
+    const aplicados = resultados.filter((r) => r.aplicado).length;
+
+    res.status(200).json({
+      success: true,
+      message: 'Puntuaciones calculadas desde asistencia',
+      data: {
+        reglas: puntosPorEstado,
+        totalProcesados: resultados.length,
+        totalAplicados: aplicados,
+        resultados
       }
     });
   } catch (error) {

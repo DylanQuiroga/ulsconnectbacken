@@ -708,4 +708,90 @@ router.patch('/users/:id/block', ensureAuth, ensureRole(['admin']), async (req, 
   }
 });
 
+// Ajustar puntuacion de un voluntario
+router.post('/volunteers/:id/score', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const delta = req.body ? Number(req.body.puntos ?? req.body.delta ?? req.body.cambio) : null;
+    if (!Number.isFinite(delta) || delta === 0) {
+      return res.status(400).json({ success: false, message: 'Debe indicar puntos/delta numerico distinto de cero' });
+    }
+
+    const motivo = req.body?.motivo || 'Ajuste manual';
+    const actividadId = req.body?.actividadId || null;
+    const sessionUserId = req.session?.user?.id || null;
+
+    const result = await userModel.adjustScore(req.params.id, delta, {
+      motivo,
+      actividadId,
+      registradoPor: sessionUserId
+    });
+
+    if (!result.user) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    res.json({
+      success: true,
+      applied: Boolean(result.applied),
+      usuario: formatUser(result.user)
+    });
+  } catch (error) {
+    console.error('Error al ajustar puntuacion:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible ajustar la puntuacion',
+      error: error.message
+    });
+  }
+});
+
+// Obtener puntaje e historial de un voluntario
+router.get('/volunteers/:id/score', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const limit = Math.max(parseInt(req.query.limit, 10) || 20, 1);
+    const score = await userModel.getScore(req.params.id, limit);
+    if (!score) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+    res.json({ success: true, data: score });
+  } catch (error) {
+    console.error('Error al obtener puntaje:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener la puntuacion',
+      error: error.message
+    });
+  }
+});
+
+// Ranking de voluntarios por puntos
+router.get('/volunteers/leaderboard', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const limit = Math.max(parseInt(req.query.limit, 10) || 10, 1);
+    const leaderboard = await userModel.getLeaderboard(limit);
+
+    const formatted = (leaderboard || []).map((u) => ({
+      id: u._id ? u._id.toString() : null,
+      nombre: u.nombre,
+      correoUniversitario: u.correoUniversitario,
+      puntos: u.puntos || 0,
+      rol: u.rol || null,
+      bloqueado: Boolean(u.bloqueado)
+    }));
+
+    res.json({
+      success: true,
+      total: formatted.length,
+      leaderboard: formatted
+    });
+  } catch (error) {
+    console.error('Error al obtener ranking:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener el ranking de voluntarios',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

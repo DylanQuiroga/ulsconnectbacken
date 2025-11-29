@@ -4,6 +4,7 @@ const router = express.Router();
 
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
+const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
 /**
  * Normaliza fechas para evitar exponer objetos Date directos en la respuesta.
@@ -93,6 +94,32 @@ router.get('/panel', ensureAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al cargar el panel del voluntario',
+      error: error.message
+    });
+  }
+});
+
+// Obtener puntaje e historial del voluntario autenticado
+router.get('/score', ensureAuth, async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Sesion no disponible' });
+    }
+
+    const limit = Math.max(parseInt(req.query.limit, 10) || 20, 1);
+    const score = await userModel.getScore(userId, limit);
+
+    if (!score) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
+
+    res.json({ success: true, data: score });
+  } catch (error) {
+    console.error('Error al obtener puntaje del voluntario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible obtener la puntuacion',
       error: error.message
     });
   }
