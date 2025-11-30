@@ -12,7 +12,25 @@ const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'l
 // Crear una nueva actividad (solo admin/staff)
 router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    const actividad = await ActividadModel.crear(req.body);
+    // Obtener id del usuario de la sesión y validarlo
+    const sessionUserId = req.session?.user?.id || null;
+    if (!sessionUserId) {
+      return res.status(401).json({ success: false, error: 'Sesión no válida' });
+    }
+
+    // Asegurar nombre de campo 'fechaFin' y ubicacion.lng si vienen con otros nombres
+    const payload = {
+      ...req.body,
+      fechaFin: req.body.fechaFin || req.body.fechaTermino || req.body.fechaInicio,
+      ubicacion: {
+        ...(req.body.ubicacion || {}),
+        lng: typeof (req.body.ubicacion && req.body.ubicacion.lng) === 'number' ? req.body.ubicacion.lng : 0
+      },
+      // Forzar creadoPor desde la sesión (seguridad)
+      creadoPor: sessionUserId
+    };
+
+    const actividad = await ActividadModel.crear(payload);
     res.status(201).json({ success: true, data: actividad });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
@@ -87,6 +105,19 @@ router.get('/estado/:estado', ensureAuth, async (req, res) => {
 // Actualizar actividad (solo admin/staff)
 router.put('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
+    // No permitir que el cliente cambie creadoPor
+    if (req.body && ('creadoPor' in req.body)) {
+      delete req.body.creadoPor;
+    }
+
+    // Normalizar fechaFin si el frontend usó fechaTermino
+    if (req.body) {
+      req.body.fechaFin = req.body.fechaFin || req.body.fechaTermino || req.body.fechaInicio;
+      if (req.body.ubicacion && typeof req.body.ubicacion.lng !== 'number') {
+        req.body.ubicacion.lng = 0;
+      }
+    }
+
     const actividad = await ActividadModel.actualizar(req.params.id, req.body);
     if (!actividad) {
       return res.status(404).json({ success: false, error: 'Actividad no encontrada' });
