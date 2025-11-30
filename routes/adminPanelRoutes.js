@@ -368,9 +368,55 @@ router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
   }
 });
 
+// Obtener todos los reportes de impacto
+router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const reports = await ReporteImpacto.find({})
+      .sort({ creadoEn: -1 })
+      .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado')
+      .populate('creadoPor', 'nombre correoUniversitario rol')
+      .lean();
+
+    const formatted = reports.map((report) => ({
+      _id: report._id,
+      actividad: report.idActividad ? {
+          _id: report.idActividad._id,
+          titulo: report.idActividad.titulo,
+          area: report.idActividad.area,
+          tipo: report.idActividad.tipo,
+          fechaInicio: report.idActividad.fechaInicio,
+          fechaFin: report.idActividad.fechaFin,
+          estado: report.idActividad.estado
+      } : null,
+      metricas: report.metricas,
+      creadoPor: report.creadoPor ? {
+          nombre: report.creadoPor.nombre,
+          correo: report.creadoPor.correoUniversitario
+      } : null,
+      creadoEn: report.creadoEn
+    }));
+
+    // Calculate totals
+    const totals = formatted.reduce((acc, curr) => {
+        acc.totalHoras += (curr.metricas.horasTotales || 0);
+        acc.totalBeneficiarios += (curr.metricas.beneficiarios || 0);
+        return acc;
+    }, { totalHoras: 0, totalBeneficiarios: 0 });
+
+    res.json({
+      success: true,
+      totals,
+      reports: formatted
+    });
+  } catch (error) {
+    console.error('Error al obtener reportes de impacto:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.post('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    const { actividadId, beneficiarios, notas } = req.body || {};
+    const { actividadId, beneficiarios, notas, horasTotales } = req.body || {};
 
     if (!actividadId) {
       return res.status(400).json({ success: false, message: 'actividadId requerido' });
@@ -418,6 +464,7 @@ router.post('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async
       idActividad: actividadId,
       metricas: {
         ...metricasCalculadas,
+        horasTotales: (horasTotales !== undefined && horasTotales !== null) ? Number(horasTotales) : metricasCalculadas.horasTotales,
         beneficiarios: beneficiariosNumber,
         notas: notasValue
       },
@@ -536,6 +583,43 @@ router.get('/panel/export/attendance', ensureAuth, ensureRole(['admin', 'staff']
     res.status(500).json({
       success: false,
       message: 'No fue posible exportar los registros de asistencia',
+      error: error.message
+    });
+  }
+});
+
+router.get('/panel/export/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const reports = await ReporteImpacto.find({})
+      .sort({ creadoEn: -1 })
+      .populate('idActividad', 'titulo area tipo fechaInicio fechaFin')
+      .populate('creadoPor', 'nombre correoUniversitario')
+      .lean();
+
+    const csv = buildCsv(reports, [
+      { header: 'ID Reporte', accessor: row => (row._id ? row._id.toString() : '') },
+      { header: 'Actividad', accessor: row => (row.idActividad ? row.idActividad.titulo : '') },
+      { header: 'Area', accessor: row => (row.idActividad ? row.idActividad.area : '') },
+      { header: 'Tipo', accessor: row => (row.idActividad ? row.idActividad.tipo : '') },
+      { header: 'Fecha Inicio', accessor: row => (row.idActividad ? formatDate(row.idActividad.fechaInicio) : '') },
+      { header: 'Invitados', accessor: row => (row.metricas ? row.metricas.voluntariosInvitados : 0) },
+      { header: 'Confirmados', accessor: row => (row.metricas ? row.metricas.voluntariosConfirmados : 0) },
+      { header: 'Asistieron', accessor: row => (row.metricas ? row.metricas.voluntariosAsistieron : 0) },
+      { header: 'Horas Totales', accessor: row => (row.metricas ? row.metricas.horasTotales : 0) },
+      { header: 'Beneficiarios', accessor: row => (row.metricas ? row.metricas.beneficiarios || 0 : 0) },
+      { header: 'Notas', accessor: row => (row.metricas ? row.metricas.notas || '' : '') },
+      { header: 'Creado Por', accessor: row => (row.creadoPor ? row.creadoPor.nombre : '') },
+      { header: 'Fecha Creacion', accessor: row => formatDate(row.creadoEn) }
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="impact_reports.csv"');
+    res.send(csv);
+  } catch (error) {
+    console.error('Error al exportar reportes de impacto:', error);
+    res.status(500).json({
+      success: false,
+      message: 'No fue posible exportar los reportes de impacto',
       error: error.message
     });
   }
@@ -791,6 +875,52 @@ router.get('/volunteers/leaderboard', ensureAuth, ensureRole(['admin', 'staff'])
       message: 'No fue posible obtener el ranking de voluntarios',
       error: error.message
     });
+  }
+});
+
+
+// Actualizar reporte de impacto
+router.put('/impact-reports/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const { beneficiarios, notas, horasTotales } = req.body || {};
+    const reportId = req.params.id;
+
+    const report = await ReporteImpacto.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Reporte no encontrado' });
+    }
+
+    if (beneficiarios !== undefined && beneficiarios !== null) {
+      const benNum = Number(beneficiarios);
+      if (!Number.isNaN(benNum) && benNum >= 0) {
+        report.metricas.beneficiarios = benNum;
+      }
+    }
+
+    if (notas !== undefined && notas !== null) {
+      report.metricas.notas = String(notas);
+    }
+
+    if (horasTotales !== undefined && horasTotales !== null) {
+       const horasNum = Number(horasTotales);
+       if (!Number.isNaN(horasNum) && horasNum >= 0) {
+         report.metricas.horasTotales = horasNum;
+       }
+    }
+
+    // Actualizar quien modificó si es necesario, o solo fecha
+    report.actualizadoEn = new Date();
+    
+    await report.save();
+
+    res.json({
+      success: true,
+      message: 'Reporte actualizado correctamente',
+      reporte: report
+    });
+  } catch (error) {
+    console.error('Error al actualizar reporte:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
