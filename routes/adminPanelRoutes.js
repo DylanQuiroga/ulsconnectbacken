@@ -52,8 +52,10 @@ function parseBoolean(value) {
 
 function formatUser(user) {
   if (!user) return null;
+  const id = user._id ? user._id.toString() : null;
   return {
-    id: user._id ? user._id.toString() : null,
+    _id: id,  // ← Agregar _id
+    id: id,   // ← Mantener id para compatibilidad
     nombre: user.nombre,
     correoUniversitario: user.correoUniversitario,
     telefono: user.telefono || null,
