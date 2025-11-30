@@ -340,6 +340,16 @@ router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
       } : null
     }));
 
+    const leaderboard = await userModel.getLeaderboard(10);
+    const leaderboardFormatted = (leaderboard || []).map((u) => ({
+      id: u._id?.toString() || null,
+      nombre: u.nombre,
+      correoUniversitario: u.correoUniversitario,
+      puntos: u.puntos || 0,
+      rol: u.rol || null,
+      bloqueado: Boolean(u.bloqueado)
+    }));
+
     res.json({
       success: true,
       panel: {
@@ -357,7 +367,8 @@ router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
         exports: {
           enrollmentsCsv: '/admin/panel/export/enrollments',
           attendanceCsv: '/admin/panel/export/attendance'
-        }
+        },
+        leaderboard: leaderboardFormatted
       }
     });
   } catch (error) {
