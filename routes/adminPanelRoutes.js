@@ -794,4 +794,86 @@ router.get('/volunteers/leaderboard', ensureAuth, ensureRole(['admin', 'staff'])
   }
 });
 
+// ============== CREAR STAFF/ADMIN ==============
+router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res) => {
+  try {
+    const { correoUniversitario, nombre, contrasena, rol, telefono, carrera } = req.body;
+
+    // Validaciones
+    if (!correoUniversitario || !nombre || !contrasena || !rol) {
+      return res.status(400).json({
+        success: false,
+        message: 'Faltan campos requeridos: correoUniversitario, nombre, contrasena, rol'
+      });
+    }
+
+    // Solo permitir crear staff o admin
+    if (!['staff', 'admin'].includes(rol)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Solo se pueden crear usuarios con rol staff o admin'
+      });
+    }
+
+    // Validar formato de correo
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(correoUniversitario)) {
+      return res.status(400).json({
+        success: false,
+        message: 'El correo electrónico no tiene un formato válido'
+      });
+    }
+
+    // Validar longitud de contraseña
+    if (contrasena.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'La contraseña debe tener al menos 6 caracteres'
+      });
+    }
+
+    // Verificar si ya existe el usuario
+    const existingUser = await userModel.findByCorreo(correoUniversitario);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ya existe un usuario con ese correo electrónico'
+      });
+    }
+
+    // Crear el usuario
+    const newUser = await userModel.createUser({
+      correoUniversitario,
+      contrasena,
+      nombre,
+      rol,
+      telefono: telefono || null,
+      carrera: carrera || '',
+      status: 'activo'
+    });
+
+    // ✅ CORREGIDO: Usar req.session.user en lugar de req.user
+    const adminEmail = req.session?.user?.correoUniversitario || 'admin';
+    console.log(`✅ Usuario ${rol} creado: ${correoUniversitario} por admin ${adminEmail}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Usuario ${rol} creado exitosamente`,
+      usuario: {
+        _id: newUser._id,
+        correoUniversitario: newUser.correoUniversitario,
+        nombre: newUser.nombre,
+        rol: newUser.rol
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno al crear el usuario'
+    });
+  }
+});
+
 module.exports = router;
