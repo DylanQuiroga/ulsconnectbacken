@@ -96,7 +96,14 @@ router.post('/login', async (req, res) => {
             id: user._id,
             correoUniversitario: user.correoUniversitario,
             nombre: user.nombre,
-            role: user.rol || user.role || 'estudiante'
+            role: user.rol || user.role || 'estudiante',
+            telefono: user.telefono || null,
+            carrera: user.carrera || '',
+            intereses: Array.isArray(user.intereses) ? user.intereses : [],
+            comuna: user.comuna || '',
+            direccion: user.direccion || '',
+            edad: user.edad || null,
+            status: user.status || ''
         };
 
         res.json({
@@ -173,11 +180,35 @@ router.post('/password/reset', async (req, res) => {
 });
 
 // GET /profile - Get current user profile (protected)
-router.get('/profile', ensureAuth, (req, res) => {
-    res.json({
-        success: true,
-        user: req.session.user
-    });
+router.get('/profile', ensureAuth, async (req, res) => {
+    try {
+        const user = await userModel.findById(req.session.user.id);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        req.session.user = {
+            id: user._id,
+            correoUniversitario: user.correoUniversitario,
+            nombre: user.nombre,
+            role: user.rol || user.role || 'estudiante',
+            telefono: user.telefono || null,
+            carrera: user.carrera || '',
+            intereses: Array.isArray(user.intereses) ? user.intereses : [],
+            comuna: user.comuna || '',
+            direccion: user.direccion || '',
+            edad: user.edad || null,
+            status: user.status || ''
+        };
+
+        res.json({
+            success: true,
+            user: req.session.user
+        });
+    } catch (err) {
+        console.error('Error fetching profile:', err);
+        res.status(500).json({ success: false, message: 'Error al obtener perfil', error: err.message });
+    }
 });
 
 // PUT /profile - Update current user profile (protected)
