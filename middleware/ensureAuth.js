@@ -1,4 +1,4 @@
-// Session-based auth guard with blocked-account detection
+// Middleware de autenticacion por sesion con deteccion de cuentas bloqueadas
 const userModel = require('../lib/userModel');
 
 module.exports = async function ensureAuth(req, res, next) {

@@ -1,3 +1,4 @@
+// Rutas de actividades: CRUD, busquedas y operaciones relacionadas
 const express = require('express');
 const path = require('path');
 const router = express.Router();
@@ -9,16 +10,19 @@ const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendan
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 const { sendActivityClosedNotification } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
-// Crear una nueva actividad (solo admin/staff)
+// Escapa texto para construir regex seguras en filtros de busqueda
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Crea una nueva actividad (solo admin/staff)
 router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    // Obtener id del usuario de la sesión y validarlo
+    // Obtiene el id del usuario de la sesion y lo valida
     const sessionUserId = req.session?.user?.id || null;
     if (!sessionUserId) {
-      return res.status(401).json({ success: false, error: 'Sesión no válida' });
+      return res.status(401).json({ success: false, error: 'Sesion no valida' });
     }
 
-    // Asegurar nombre de campo 'fechaFin' y ubicacion.lng si vienen con otros nombres
+    // Normaliza nombre de campo 'fechaFin' y ubicacion.lng si vienen con otros nombres
     const payload = {
       ...req.body,
       fechaFin: req.body.fechaFin || req.body.fechaTermino || req.body.fechaInicio,
@@ -26,7 +30,7 @@ router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
         ...(req.body.ubicacion || {}),
         lng: typeof (req.body.ubicacion && req.body.ubicacion.lng) === 'number' ? req.body.ubicacion.lng : 0
       },
-      // Forzar creadoPor desde la sesión (seguridad)
+      // Fuerza creadoPor desde la sesion (seguridad)
       creadoPor: sessionUserId
     };
 
@@ -37,7 +41,7 @@ router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
   }
 });
 
-// Obtener todas las actividades
+// Obtiene todas las actividades
 router.get('/', ensureAuth, async (req, res) => {
   try {
     const actividades = await ActividadModel.obtenerTodas();
@@ -47,13 +51,11 @@ router.get('/', ensureAuth, async (req, res) => {
   }
 });
 
-// Buscar actividades por título y/o tipo
+// Busca actividades por titulo y/o tipo
 router.get('/search', ensureAuth, async (req, res) => {
   try {
     const { titulo, tipo } = req.query || {};
     const filtros = {};
-
-    const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     if (titulo) {
       filtros.titulo = { $regex: escapeRegex(titulo), $options: 'i' };
@@ -69,7 +71,27 @@ router.get('/search', ensureAuth, async (req, res) => {
   }
 });
 
-// Obtener actividad por ID
+// Obtiene actividades por area
+router.get('/area/:area', ensureAuth, async (req, res) => {
+  try {
+    const actividades = await ActividadModel.obtenerPorArea(req.params.area);
+    res.status(200).json({ success: true, data: actividades });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Obtiene actividades por estado
+router.get('/estado/:estado', ensureAuth, async (req, res) => {
+  try {
+    const actividades = await ActividadModel.obtenerPorEstado(req.params.estado);
+    res.status(200).json({ success: true, data: actividades });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Obtiene actividad por ID
 router.get('/:id', ensureAuth, async (req, res) => {
   try {
     const actividad = await ActividadModel.obtenerPorId(req.params.id);
@@ -82,35 +104,15 @@ router.get('/:id', ensureAuth, async (req, res) => {
   }
 });
 
-// Obtener actividades por área
-router.get('/area/:area', ensureAuth, async (req, res) => {
-  try {
-    const actividades = await ActividadModel.obtenerPorArea(req.params.area);
-    res.status(200).json({ success: true, data: actividades });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Obtener actividades por estado
-router.get('/estado/:estado', ensureAuth, async (req, res) => {
-  try {
-    const actividades = await ActividadModel.obtenerPorEstado(req.params.estado);
-    res.status(200).json({ success: true, data: actividades });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Actualizar actividad (solo admin/staff)
+// Actualiza actividad (solo admin/staff)
 router.put('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
-    // No permitir que el cliente cambie creadoPor
+    // No permite que el cliente cambie creadoPor
     if (req.body && ('creadoPor' in req.body)) {
       delete req.body.creadoPor;
     }
 
-    // Normalizar fechaFin si el frontend usó fechaTermino
+    // Normaliza fechaFin si el frontend uso fechaTermino
     if (req.body) {
       req.body.fechaFin = req.body.fechaFin || req.body.fechaTermino || req.body.fechaInicio;
       if (req.body.ubicacion && typeof req.body.ubicacion.lng !== 'number') {
@@ -128,7 +130,7 @@ router.put('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) 
   }
 });
 
-// Eliminar actividad (solo admin/staff)
+// Elimina actividad (solo admin/staff)
 router.delete('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividad = await ActividadModel.eliminar(req.params.id);
@@ -141,7 +143,7 @@ router.delete('/:id', ensureAuth, ensureRole(['admin', 'staff']), async (req, re
   }
 });
 
-// CASO DE USO 9: Cerrar convocatoria (solo admin/staff)
+// Cierra la convocatoria de una actividad (solo admin/staff)
 router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { motivo } = req.body || {};
@@ -154,7 +156,7 @@ router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req
     }
 
     if (actividad.estado === 'closed') {
-      return res.status(400).json({ success: false, error: 'La actividad ya está cerrada' });
+      return res.status(400).json({ success: false, error: 'La actividad ya esta cerrada' });
     }
 
     const actividadCerrada = await ActividadModel.cerrarConvocatoria(req.params.id, motivoCierre);
@@ -197,7 +199,7 @@ router.post('/:id/close', ensureAuth, ensureRole(['admin', 'staff']), async (req
   }
 });
 
-// Calcular y aplicar puntuaciones segun asistencia (solo admin/staff)
+// Calcula y aplica puntuaciones segun asistencia (solo admin/staff)
 router.post('/:id/puntuar', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividadId = req.params.id;

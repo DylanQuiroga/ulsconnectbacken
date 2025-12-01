@@ -1,7 +1,5 @@
-// Middleware factory to ensure the logged user has one of the allowed roles
-// This implementation validates the role against the database (via lib/userModel)
-// to ensure role changes are respected immediately. If DB lookup fails,
-// it falls back to the role stored in session.
+// Middleware de roles: asegura que el usuario tenga alguno de los roles permitidos
+// Consulta el rol en BD para respetar cambios inmediatos y, si falla, recurre al rol en sesion
 const userModel = require('../lib/userModel');
 
 module.exports = function ensureRole(allowedRoles) {

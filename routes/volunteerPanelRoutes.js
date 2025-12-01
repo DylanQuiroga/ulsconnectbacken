@@ -1,3 +1,4 @@
+// Rutas del panel de voluntario (resumen de inscripciones y puntaje)
 const express = require('express');
 const path = require('path');
 const router = express.Router();
@@ -6,9 +7,7 @@ const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'
 const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
-/**
- * Normaliza fechas para evitar exponer objetos Date directos en la respuesta.
- */
+// Normaliza fechas para evitar exponer objetos Date directos en la respuesta
 function formatDate(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -16,9 +15,7 @@ function formatDate(value) {
   return date.toISOString();
 }
 
-/**
- * Determina si una actividad es proxima u ocurre actualmente.
- */
+// Determina si una actividad es proxima u ocurre actualmente
 function isUpcomingActivity(enrollmentDetail, now) {
   const start = enrollmentDetail.startDate ? new Date(enrollmentDetail.startDate) : null;
   const end = enrollmentDetail.endDate ? new Date(enrollmentDetail.endDate) : null;

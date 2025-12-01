@@ -1,3 +1,4 @@
+// Rutas de autenticacion y gestion de perfil
 const express = require('express');
 const router = express.Router();
 const path = require('path');
@@ -6,17 +7,17 @@ const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'
 const passwordResetService = require(path.join(__dirname, '..', 'lib', 'passwordResetService'));
 const { sendPasswordResetEmail } = require(path.join(__dirname, '..', 'lib', 'emailService'));
 
-// GET /signup - Returns instructions for signup (JSON API info)
+// GET /signup - Resumen de uso de la ruta de registro
 router.get('/signup', (req, res) => {
     res.json({
-        message: 'Para registrarse, envie un POST a /signup con correoUniversitario, contrasena, nombre, y opcionalmente telefono, carrera, intereses, comuna, direccion, edad, status',
+        message: 'Para registrarse, envie un POST a /signup con correoUniversitario, contrasena, nombre y opcionalmente telefono, carrera, intereses, comuna, direccion, edad, status',
         endpoint: 'POST /signup',
         requiredFields: ['correoUniversitario', 'contrasena', 'nombre'],
         optionalFields: ['telefono', 'carrera', 'intereses', 'comuna', 'direccion', 'edad', 'status']
     });
 });
 
-// POST /signup - Submit registration request for admin approval
+// POST /signup - Crea una solicitud de registro para aprobacion
 router.post('/signup', async (req, res) => {
     const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
 
@@ -60,7 +61,7 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-// GET /login - Returns instructions for login (JSON API info)
+// GET /login - Resumen de uso de la ruta de login
 router.get('/login', (req, res) => {
     res.json({
         message: 'Para iniciar sesion, envie un POST a /login con correoUniversitario y contrasena',
@@ -69,7 +70,7 @@ router.get('/login', (req, res) => {
     });
 });
 
-// POST /login - Submit login credentials
+// POST /login - Inicia sesion
 router.post('/login', async (req, res) => {
     const { correoUniversitario, contrasena } = req.body || {};
 
@@ -117,7 +118,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// POST /password/forgot - Start password reset flow
+// POST /password/forgot - Inicia flujo de recuperacion de contrasena
 router.post('/password/forgot', async (req, res) => {
     const { correoUniversitario } = req.body || {};
     if (!correoUniversitario) {
@@ -148,7 +149,7 @@ router.post('/password/forgot', async (req, res) => {
     }
 });
 
-// POST /password/reset - Complete password reset
+// POST /password/reset - Completa el reseteo de contrasena
 router.post('/password/reset', async (req, res) => {
     const { token, contrasena } = req.body || {};
     if (!token || !contrasena) {
@@ -179,7 +180,7 @@ router.post('/password/reset', async (req, res) => {
     }
 });
 
-// GET /profile - Get current user profile (protected)
+// GET /profile - Obtiene el perfil del usuario autenticado
 router.get('/profile', ensureAuth, async (req, res) => {
     try {
         const user = await userModel.findById(req.session.user.id);
@@ -211,7 +212,7 @@ router.get('/profile', ensureAuth, async (req, res) => {
     }
 });
 
-// PUT /profile - Update current user profile (protected)
+// PUT /profile - Actualiza el perfil del usuario autenticado
 router.put('/profile', ensureAuth, async (req, res) => {
     const sessionUser = req.session && req.session.user ? req.session.user : null;
     if (!sessionUser || !sessionUser.id) {
@@ -325,7 +326,7 @@ router.put('/profile', ensureAuth, async (req, res) => {
     }
 });
 
-// GET /logout - Destroy session
+// GET /logout - Cierra sesion
 router.get('/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
