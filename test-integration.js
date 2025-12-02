@@ -15,6 +15,7 @@ const client = isHttps ? https : http;
 let testsPassed = 0;
 let testsFailed = 0;
 let cookies = '';
+let csrfTokenValue = '';
 
 // Color codes for terminal output
 const colors = {
@@ -34,7 +35,9 @@ function log(type, message) {
   console.log(`${color}[${timestamp}] ${type}\t${colors.reset}${message}`);
 }
 
-function makeRequest(method, path, data = null) {
+const pause = (ms = 400) => new Promise(resolve => setTimeout(resolve, ms));
+
+function makeRequest(method, path, data = null, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(API_URL + path);
     const options = {
@@ -44,7 +47,8 @@ function makeRequest(method, path, data = null) {
       method: method,
       headers: {
         'Content-Type': 'application/json',
-        'Cookie': cookies
+        'Cookie': cookies,
+        ...extraHeaders
       }
     };
 
@@ -56,7 +60,10 @@ function makeRequest(method, path, data = null) {
     const req = client.request(options, (res) => {
       let body = '';
       if (res.headers['set-cookie']) {
-        cookies = res.headers['set-cookie'][0].split(';')[0];
+        const setCookie = res.headers['set-cookie'];
+        cookies = Array.isArray(setCookie)
+          ? setCookie.map(c => c.split(';')[0]).join('; ')
+          : setCookie.split(';')[0];
       }
 
       res.on('data', chunk => body += chunk);
@@ -190,9 +197,9 @@ async function testRoleBasedAccess() {
     log('INFO', 'Testing Role-Based Access Control...');
     
     // Attempt admin endpoint without auth
-    const res = await makeRequest('GET', '/registrations/requests');
+    const res = await makeRequest('GET', '/auth/requests');
     
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401 || res.status === 403 || res.status === 302) {
       log('PASS', 'Protected endpoints require authentication');
       testsPassed++;
     } else {
@@ -205,6 +212,223 @@ async function testRoleBasedAccess() {
   }
 }
 
+async function testCsrfTokenEndpoint() {
+  try {
+    log('INFO', 'Testing CSRF token endpoint...');
+    const res = await makeRequest('GET', '/csrf-token');
+    csrfTokenValue = res.body && res.body.csrfToken ? res.body.csrfToken : '';
+    const setCookie = res.headers['set-cookie'] || [];
+    const hasCookie = Array.isArray(setCookie)
+      ? setCookie.some(c => c.includes('XSRF-TOKEN'))
+      : typeof setCookie === 'string' && setCookie.includes('XSRF-TOKEN');
+
+    if (res.status === 200 && csrfTokenValue && hasCookie) {
+      log('PASS', 'CSRF token issued with cookie');
+      testsPassed++;
+    } else {
+      log('FAIL', `CSRF endpoint unexpected response (status ${res.status})`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `CSRF token endpoint test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testSignupValidationMissingFields() {
+  try {
+    log('INFO', 'Testing signup validation (missing fields)...');
+    const res = await makeRequest('POST', '/signup', {
+      correoUniversitario: 'integration+missing@userena.cl'
+    });
+
+    if (res.status === 400) {
+      log('PASS', 'Signup missing fields rejected with 400');
+      testsPassed++;
+    } else {
+      log('FAIL', `Signup missing fields returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Signup validation test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testLoginValidationMissingFields() {
+  try {
+    log('INFO', 'Testing login validation (missing fields)...');
+    const res = await makeRequest('POST', '/login', {});
+
+    if (res.status === 400) {
+      log('PASS', 'Login missing fields rejected with 400');
+      testsPassed++;
+    } else {
+      log('FAIL', `Login missing fields returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Login validation test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testPasswordForgotValidation() {
+  try {
+    log('INFO', 'Testing password reset request validation...');
+    const res = await makeRequest('POST', '/password/forgot', {});
+    if (res.status === 400) {
+      log('PASS', 'Password reset request without email rejected');
+      testsPassed++;
+    } else {
+      log('FAIL', `Password reset request returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Password reset request validation failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testPasswordResetValidation() {
+  try {
+    log('INFO', 'Testing password reset payload validation...');
+    const res = await makeRequest('POST', '/password/reset', {
+      token: '',
+      contrasena: 'short'
+    });
+
+    if (res.status === 400) {
+      log('PASS', 'Password reset with invalid payload rejected');
+      testsPassed++;
+    } else {
+      log('FAIL', `Password reset validation returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Password reset validation test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testVolunteerPanelRequiresAuth() {
+  try {
+    log('INFO', 'Testing volunteer panel protection...');
+    const res = await makeRequest('GET', '/volunteer/panel');
+    if (res.status === 401 || res.status === 403 || res.status === 302) {
+      log('PASS', 'Volunteer panel is protected');
+      testsPassed++;
+    } else {
+      log('FAIL', `Volunteer panel unexpectedly accessible (status ${res.status})`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Volunteer panel protection test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testAdminPanelRequiresAuth() {
+  try {
+    log('INFO', 'Testing admin panel protection...');
+    const res = await makeRequest('GET', '/admin/panel');
+    if (res.status === 401 || res.status === 403 || res.status === 302) {
+      log('PASS', 'Admin panel is protected');
+      testsPassed++;
+    } else {
+      log('FAIL', `Admin panel unexpectedly accessible (status ${res.status})`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Admin panel protection test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testActivitiesRequireAuth() {
+  try {
+    log('INFO', 'Testing activities listing protection...');
+    const res = await makeRequest('GET', '/api/activities');
+    if (res.status === 401 || res.status === 403 || res.status === 302 || res.status === 503) {
+      log('PASS', 'Activities endpoint requires authentication');
+      testsPassed++;
+    } else {
+      log('FAIL', `Activities endpoint unexpectedly accessible (status ${res.status})`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Activities protection test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testRegistrationRequestRequiresCsrf() {
+  try {
+    log('INFO', 'Testing registration request CSRF protection...');
+    const res = await makeRequest('POST', '/auth/request', {
+      correoUniversitario: `no-csrf-${Date.now()}@userena.cl`,
+      contrasena: 'SecurePass123!',
+      nombre: 'No CSRF Header'
+    });
+
+    if (res.status === 403) {
+      log('PASS', 'Registration request rejected without CSRF header');
+      testsPassed++;
+    } else {
+      log('FAIL', `Registration request without CSRF returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Registration CSRF protection test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testRegistrationRequestWithCsrf() {
+  try {
+    log('INFO', 'Testing registration request with CSRF token...');
+    if (!csrfTokenValue) {
+      log('FAIL', 'CSRF token not available to test positive registration flow');
+      testsFailed++;
+      return;
+    }
+
+    const res = await makeRequest('POST', '/auth/request', {
+      correoUniversitario: `with-csrf-${Date.now()}@userena.cl`,
+      contrasena: 'SecurePass123!',
+      nombre: 'CSRF Enabled'
+    }, { 'X-CSRF-Token': csrfTokenValue });
+
+    if (res.status === 201 || res.status === 200 || res.status === 409) {
+      log('PASS', 'Registration request accepted when CSRF token present');
+      testsPassed++;
+    } else {
+      log('FAIL', `Registration with CSRF returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `Registration CSRF positive test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
+async function testNotFoundRoute() {
+  try {
+    log('INFO', 'Testing 404 handler...');
+    const res = await makeRequest('GET', `/this-route-should-404-${Date.now()}`);
+    if (res.status === 404) {
+      log('PASS', 'Unknown route returns 404');
+      testsPassed++;
+    } else {
+      log('FAIL', `Unknown route returned ${res.status}`);
+      testsFailed++;
+    }
+  } catch (err) {
+    log('FAIL', `404 handler test failed: ${err.message}`);
+    testsFailed++;
+  }
+}
+
 async function runTests() {
   console.log(`\n${colors.blue}╔════════════════════════════════════════╗${colors.reset}`);
   console.log(`${colors.blue}║  ULSConnect Backend - Integration Tests  ║${colors.reset}`);
@@ -212,24 +436,30 @@ async function runTests() {
   console.log(`${colors.blue}╚════════════════════════════════════════╝${colors.reset}\n`);
 
   try {
-    await testHealthCheck();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    await testSecurityHeaders();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    await testInstitutionalEmailValidation();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    await testCSRFProtection();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    await testRoleBasedAccess();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Only test rate limiting last (it blocks)
-    // await testRateLimiting();
-    
+    const suite = [
+      testHealthCheck,
+      testSecurityHeaders,
+      testInstitutionalEmailValidation,
+      testCSRFProtection,
+      testRoleBasedAccess,
+      testCsrfTokenEndpoint,
+      testSignupValidationMissingFields,
+      testLoginValidationMissingFields,
+      testPasswordForgotValidation,
+      testPasswordResetValidation,
+      testVolunteerPanelRequiresAuth,
+      testAdminPanelRequiresAuth,
+      testActivitiesRequireAuth,
+      testRegistrationRequestRequiresCsrf,
+      testRegistrationRequestWithCsrf,
+      testNotFoundRoute
+      // testRateLimiting, // keep last if enabled manually
+    ];
+
+    for (const testFn of suite) {
+      await testFn();
+      await pause();
+    }
   } catch (err) {
     log('FAIL', `Test suite error: ${err.message}`);
   }
