@@ -7,7 +7,7 @@ const Usuario = require('../lib/schema/Usuario');
 const Actividad = require('../lib/schema/Actividad');
 const bcrypt = require('bcryptjs');
 
-// Test data
+// Datos de prueba
 let testUsers = [];
 let testActivity = null;
 let testInscriptions = [];
@@ -16,7 +16,7 @@ let testAttendance = null;
 async function setupTestData() {
   await db.connect();
   
-  // Create test users
+  // Crear usuarios de prueba
   const hash = await bcrypt.hash('testpass123', 10);
   const users = [];
   for (let i = 1; i <= 3; i++) {
@@ -31,7 +31,7 @@ async function setupTestData() {
   }
   testUsers = users;
 
-  // Create test activity
+  // Crear actividad de prueba
   const activity = new Actividad({
     titulo: `Test Activity ${Date.now()}`,
     descripcion: 'Test activity for attendance model',
@@ -51,7 +51,7 @@ async function setupTestData() {
   await activity.save();
   testActivity = activity;
 
-  // Create test inscriptions with 'activa' status
+  // Crear inscripciones de prueba con estado 'activa'
   const inscriptions = [];
   for (const user of testUsers) {
     const inscription = new Inscripcion({
@@ -80,75 +80,75 @@ async function cleanupTestData() {
       await Usuario.deleteMany({ _id: { $in: testUsers.map(u => u._id) } });
     }
   } catch (err) {
-    console.error('Cleanup error:', err.message);
+    console.error('Error en limpieza:', err.message);
   }
 }
 
 async function test_createAttendanceList() {
-  console.log('\n[TEST] createAttendanceList');
+  console.log('\n[TEST] Crear lista de asistencia');
   try {
     const attendance = await AttendanceModel.createAttendanceList(
       testActivity._id,
       testUsers[0]._id
     );
 
-    // Verify attendance was created
-    if (!attendance) throw new Error('Attendance not created');
-    if (!attendance._id) throw new Error('Attendance missing ID');
+    // Verificar que la asistencia fue creada
+    if (!attendance) throw new Error('Asistencia no creada');
+    if (!attendance._id) throw new Error('Asistencia sin ID');
 
     const actividadId = attendance.actividad._id;
 
     if (actividadId.toString() !== testActivity._id.toString())
-      throw new Error('Activity ID mismatch');
+      throw new Error('Mismatch en ID de actividad');
     
-    // Verify inscriptions list
+    // Verificar lista de inscripciones
     if (!Array.isArray(attendance.inscripciones)) 
-      throw new Error('inscripciones is not an array');
+      throw new Error('inscripciones no es un arreglo');
     if (attendance.inscripciones.length !== testUsers.length) 
-      throw new Error(`Expected ${testUsers.length} inscriptions, got ${attendance.inscripciones.length}`);
+      throw new Error(`Se esperaban ${testUsers.length} inscripciones, se obtuvieron ${attendance.inscripciones.length}`);
 
-    // Verify all inscriptions have default 'ausente'
+    // Verificar que todas las inscripciones tengan 'ausente' por defecto
     attendance.inscripciones.forEach((entry, index) => {
       if (entry.asistencia !== 'ausente') 
-        throw new Error(`Entry ${index} asistencia should be 'ausente', got '${entry.asistencia}'`);
+        throw new Error(`Entrada ${index} asistencia debe ser 'ausente', se obtuvo '${entry.asistencia}'`);
     });
 
-    // Verify registradoPor
+    // Verificar registradoPor
     if (attendance.registradoPor._id.toString() !== testUsers[0]._id.toString()) 
-      throw new Error('registradoPor mismatch');
+      throw new Error('Mismatch en registradoPor');
 
     testAttendance = attendance;
-    console.log('✓ createAttendanceList passed');
+    console.log('✓ Crear lista de asistencia exitoso');
     return true;
   } catch (err) {
-    console.error('✗ createAttendanceList failed:', err.message);
+    console.error('✗ Crear lista de asistencia falló:', err.message);
     return false;
   }
 }
 
 async function test_createAttendanceList_duplicate() {
-  console.log('\n[TEST] createAttendanceList - duplicate prevention');
+  console.log('\n[TEST] Crear lista de asistencia - prevención de duplicados');
   try {
-    // Try creating another attendance for the same activity
+    // Intentar crear otra asistencia para la misma actividad
     const attendance2 = await AttendanceModel.createAttendanceList(
       testActivity._id,
       testUsers[0]._id
     );
 
-    // Should return the existing one
+    // Debe retornar la existente
     if (attendance2._id.toString() !== testAttendance._id.toString()) 
-      throw new Error('Should return existing attendance, not create a new one');
+      throw new Error('Debe retornar la asistencia existente, no crear una nueva');
 
-    console.log('✓ createAttendanceList duplicate prevention passed');
+    console.log('✓ Prevención de duplicados exitosa');
     return true;
   } catch (err) {
-    console.error('✗ createAttendanceList duplicate prevention failed:', err.message);
+    console.error('✗ Prevención de duplicados falló:', err.message);
     return false;
   }
 }
 
 async function test_takeAttendance() {
-  console.log('\n[TEST] takeAttendance');
+  console.log('\n[TEST] Tomar asistencia');
   try {
     const payload = {
       presentes: [testUsers[0]._id, testUsers[1]._id],
@@ -162,31 +162,31 @@ async function test_takeAttendance() {
       testUsers[0]._id
     );
 
-    // Verify updates
-    if (!updated) throw new Error('Updated attendance not returned');
+    // Verificar actualizaciones
+    if (!updated) throw new Error('Asistencia actualizada no retornada');
 
     const user0Entry = updated.inscripciones.find(e => e.usuario._id.toString() === testUsers[0]._id.toString());
     const user1Entry = updated.inscripciones.find(e => e.usuario._id.toString() === testUsers[1]._id.toString());
     const user2Entry = updated.inscripciones.find(e => e.usuario._id.toString() === testUsers[2]._id.toString());
 
     if (!user0Entry || user0Entry.asistencia !== 'presente') 
-      throw new Error('User 0 should be marked as presente');
+      throw new Error('Usuario 0 debe estar marcado como presente');
     if (!user1Entry || user1Entry.asistencia !== 'presente') 
-      throw new Error('User 1 should be marked as presente');
+      throw new Error('Usuario 1 debe estar marcado como presente');
     if (!user2Entry || user2Entry.asistencia !== 'ausente') 
-      throw new Error('User 2 should be marked as ausente');
+      throw new Error('Usuario 2 debe estar marcado como ausente');
 
     testAttendance = updated;
-    console.log('✓ takeAttendance passed');
+    console.log('✓ Tomar asistencia exitoso');
     return true;
   } catch (err) {
-    console.error('✗ takeAttendance failed:', err.message);
+    console.error('✗ Tomar asistencia falló:', err.message);
     return false;
   }
 }
 
 async function test_takeAttendance_justificada() {
-  console.log('\n[TEST] takeAttendance with justificada');
+  console.log('\n[TEST] Tomar asistencia con justificada');
   try {
     const payload = {
       presentes: [],
@@ -202,19 +202,19 @@ async function test_takeAttendance_justificada() {
 
     const user0Entry = updated.inscripciones.find(e => e.usuario._id.toString() === testUsers[0]._id.toString());
     if (!user0Entry || user0Entry.asistencia !== 'justificada') 
-      throw new Error('User 0 should be marked as justificada');
+      throw new Error('Usuario 0 debe estar marcado como justificada');
 
     testAttendance = updated;
-    console.log('✓ takeAttendance with justificada passed');
+    console.log('✓ Tomar asistencia con justificada exitoso');
     return true;
   } catch (err) {
-    console.error('✗ takeAttendance with justificada failed:', err.message);
+    console.error('✗ Tomar asistencia con justificada falló:', err.message);
     return false;
   }
 }
 
 async function test_updateAttendanceEntries() {
-  console.log('\n[TEST] updateAttendanceEntries');
+  console.log('\n[TEST] Actualizar entradas de asistencia');
   try {
     const updates = [
       { usuario: testUsers[0]._id, asistencia: 'presente' },
@@ -228,36 +228,36 @@ async function test_updateAttendanceEntries() {
       testUsers[0]._id
     );
 
-    if (!result.attendance) throw new Error('Attendance not returned');
-    if (!Array.isArray(result.skipped)) throw new Error('skipped should be an array');
+    if (!result.attendance) throw new Error('Asistencia no retornada');
+    if (!Array.isArray(result.skipped)) throw new Error('omitidos debe ser un arreglo');
 
     const user0Entry = result.attendance.inscripciones.find(e => e.usuario._id.toString() === testUsers[0]._id.toString());
     const user1Entry = result.attendance.inscripciones.find(e => e.usuario._id.toString() === testUsers[1]._id.toString());
     const user2Entry = result.attendance.inscripciones.find(e => e.usuario._id.toString() === testUsers[2]._id.toString());
 
     if (!user0Entry || user0Entry.asistencia !== 'presente') 
-      throw new Error('User 0 update failed');
+      throw new Error('Actualización del usuario 0 falló');
     if (!user1Entry || user1Entry.asistencia !== 'justificada') 
-      throw new Error('User 1 update failed');
+      throw new Error('Actualización del usuario 1 falló');
     if (!user2Entry || user2Entry.asistencia !== 'ausente') 
-      throw new Error('User 2 update failed');
+      throw new Error('Actualización del usuario 2 falló');
 
     testAttendance = result.attendance;
-    console.log('✓ updateAttendanceEntries passed');
+    console.log('✓ Actualizar entradas de asistencia exitoso');
     return true;
   } catch (err) {
-    console.error('✗ updateAttendanceEntries failed:', err.message);
+    console.error('✗ Actualizar entradas de asistencia falló:', err.message);
     return false;
   }
 }
 
 async function test_updateAttendanceEntries_withSkipped() {
-  console.log('\n[TEST] updateAttendanceEntries - with skipped users');
+  console.log('\n[TEST] Actualizar entradas - con usuarios omitidos');
   try {
-    const fakeUserId = '507f1f77bcf86cd799439011'; // Fake MongoDB ID
+    const fakeUserId = '507f1f77bcf86cd799439011'; // ID falso de MongoDB
     const updates = [
       { usuario: testUsers[0]._id, asistencia: 'presente' },
-      { usuario: fakeUserId, asistencia: 'presente' } // This user doesn't exist in inscripciones
+      { usuario: fakeUserId, asistencia: 'presente' } // Este usuario no existe en inscripciones
     ];
 
     const result = await AttendanceModel.updateAttendanceEntries(
@@ -267,86 +267,86 @@ async function test_updateAttendanceEntries_withSkipped() {
     );
 
     if (!Array.isArray(result.skipped) || result.skipped.length === 0) 
-      throw new Error('Should have skipped the fake user ID');
+      throw new Error('Debe omitir el ID de usuario falso');
     if (!result.skipped[0].includes(fakeUserId)) 
-      throw new Error('skipped should contain the fake user ID');
+      throw new Error('omitidos debe contener el ID de usuario falso');
 
-    console.log('✓ updateAttendanceEntries with skipped users passed');
+    console.log('✓ Actualizar entradas con usuarios omitidos exitoso');
     return true;
   } catch (err) {
-    console.error('✗ updateAttendanceEntries with skipped users failed:', err.message);
+    console.error('✗ Actualizar entradas con usuarios omitidos falló:', err.message);
     return false;
   }
 }
 
 async function test_refreshAttendanceList() {
-  console.log('\n[TEST] refreshAttendanceList');
+  console.log('\n[TEST] Refrescar lista de asistencia');
   try {
-    // First, cancel one inscription
+    // Primero, cancelar una inscripción
     const inscripcionToCancel = testInscriptions[2];
     inscripcionToCancel.estado = 'cancelada';
     await inscripcionToCancel.save();
 
-    // Refresh the attendance list
+    // Refrescar la lista de asistencia
     const refreshed = await AttendanceModel.refreshAttendanceList(
       testAttendance._id,
       testUsers[0]._id
     );
 
-    // Should now only have 2 inscriptions (the third was cancelled)
-    if (!refreshed) throw new Error('Refreshed attendance not returned');
+    // Ahora debe tener solo 2 inscripciones (la tercera fue cancelada)
+    if (!refreshed) throw new Error('Asistencia refrescada no retornada');
     if (refreshed.inscripciones.length !== 2) 
-      throw new Error(`Expected 2 inscriptions after cancel, got ${refreshed.inscripciones.length}`);
+      throw new Error(`Se esperaban 2 inscripciones después de cancelar, se obtuvieron ${refreshed.inscripciones.length}`);
 
-    // All should be reset to 'ausente'
+    // Todas deben estar en 'ausente'
     refreshed.inscripciones.forEach((entry, index) => {
       if (entry.asistencia !== 'ausente') 
-        throw new Error(`Entry ${index} should be reset to 'ausente', got '${entry.asistencia}'`);
+        throw new Error(`Entrada ${index} debe reiniciarse a 'ausente', se obtuvo '${entry.asistencia}'`);
     });
 
     testAttendance = refreshed;
-    console.log('✓ refreshAttendanceList passed');
+    console.log('✓ Refrescar lista de asistencia exitoso');
     return true;
   } catch (err) {
-    console.error('✗ refreshAttendanceList failed:', err.message);
+    console.error('✗ Refrescar lista de asistencia falló:', err.message);
     return false;
   }
 }
 
 async function test_errorHandling() {
-  console.log('\n[TEST] Error handling');
+  console.log('\n[TEST] Manejo de errores');
   try {
-    // Test missing attendanceId
+    // Prueba de attendanceId faltante
     try {
       await AttendanceModel.takeAttendance(null, {}, testUsers[0]._id);
-      throw new Error('Should throw error for missing attendanceId');
+      throw new Error('Debe lanzar error por attendanceId faltante');
     } catch (err) {
       if (!err.message.includes('attendanceId requerido')) 
-        throw new Error('Wrong error message for missing attendanceId');
+        throw new Error('Mensaje de error incorrecto por attendanceId faltante');
     }
 
-    // Test missing sessionUserId
+    // Prueba de sessionUserId faltante
     try {
       await AttendanceModel.takeAttendance(testAttendance._id, {}, null);
-      throw new Error('Should throw error for missing sessionUserId');
+      throw new Error('Debe lanzar error por sessionUserId faltante');
     } catch (err) {
       if (!err.message.includes('sessionUserId requerido')) 
-        throw new Error('Wrong error message for missing sessionUserId');
+        throw new Error('Mensaje de error incorrecto por sessionUserId faltante');
     }
 
-    // Test invalid attendance ID
+    // Prueba de ID de asistencia inválido
     try {
       await AttendanceModel.takeAttendance('invalid_id', {}, testUsers[0]._id);
-      throw new Error('Should throw error for invalid attendance ID');
+      throw new Error('Debe lanzar error por ID de asistencia inválido');
     } catch (err) {
       if (!err.message.includes('Registro de asistencia no encontrado')) 
-        throw new Error('Wrong error message for invalid attendance ID');
+        throw new Error('Mensaje de error incorrecto por ID de asistencia inválido');
     }
 
-    console.log('✓ Error handling passed');
+    console.log('✓ Manejo de errores exitoso');
     return true;
   } catch (err) {
-    console.error('✗ Error handling failed:', err.message);
+    console.error('✗ Manejo de errores falló:', err.message);
     return false;
   }
 }
@@ -356,11 +356,11 @@ async function run() {
   let failed = 0;
 
   try {
-    console.log('Starting AttendanceModel tests...');
+    console.log('Iniciando pruebas de AttendanceModel...');
     await setupTestData();
-    console.log('Test data setup complete');
+    console.log('Configuración de datos de prueba completada\n');
 
-    // Run all tests
+    // Ejecutar todas las pruebas
     if (await test_createAttendanceList()) passed++; else failed++;
     if (await test_createAttendanceList_duplicate()) passed++; else failed++;
     if (await test_takeAttendance()) passed++; else failed++;
@@ -371,13 +371,13 @@ async function run() {
     if (await test_errorHandling()) passed++; else failed++;
 
     console.log(`\n${'='.repeat(50)}`);
-    console.log(`Tests completed: ${passed} passed, ${failed} failed`);
+    console.log(`Pruebas completadas: ${passed} exitosas, ${failed} fallidas`);
     console.log(`${'='.repeat(50)}`);
 
     await cleanupTestData();
     process.exit(failed === 0 ? 0 : 1);
   } catch (err) {
-    console.error('TEST SUITE ERROR:', err.message);
+    console.error('ERROR EN SUITE DE PRUEBAS:', err.message);
     await cleanupTestData();
     process.exit(1);
   }

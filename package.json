@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node test/test-admin-events-students.js && node test/test-admin-panel.js && node test/test-impact-report.js && node test/test-close-auth.js && node test/test-close.js && node test/test-password-reset.js && node test/test-volunteer-panel.js && node test/test-admin-users.js",
     "test:attendance": "node test/test-attendance-model.js",
+    "test:inscripcion": "node test/test-inscripcion-model.js",
     "start": "node app.js",
     "dev": "nodemon app.js"
   },
