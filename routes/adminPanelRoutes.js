@@ -1,3 +1,4 @@
+// Rutas del panel administrativo: metricas, reportes e informacion de usuarios
 const express = require('express');
 const path = require('path');
 const router = express.Router();
@@ -10,6 +11,7 @@ const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendan
 const ReporteImpacto = require(path.join(__dirname, '..', 'lib', 'schema', 'ReporteImpacto'));
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
+// Normaliza fechas a ISO string
 function formatDate(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -17,12 +19,14 @@ function formatDate(value) {
   return date.toISOString();
 }
 
+// Genera etiqueta AAAA-MM para agrupaciones por mes
 function bucketLabel(bucket) {
   if (!bucket || typeof bucket.year !== 'number' || typeof bucket.month !== 'number') return 'N/A';
   const month = bucket.month < 10 ? `0${bucket.month}` : bucket.month;
   return `${bucket.year}-${month}`;
 }
 
+// Escapa valores para CSV
 function escapeCsv(value) {
   if (value === null || value === undefined) return '';
   const str = String(value).replace(/\r?\n/g, ' ').trim();
@@ -32,6 +36,7 @@ function escapeCsv(value) {
   return str;
 }
 
+// Genera contenido CSV a partir de filas y columnas con accessor
 function buildCsv(rows, columns) {
   if (!Array.isArray(rows) || !rows.length) {
     return columns.map(col => escapeCsv(col.header)).join(',');
@@ -41,6 +46,7 @@ function buildCsv(rows, columns) {
   return [header, ...lines].join('\n');
 }
 
+// Parsea distintos formatos de booleano recibidos en query/body
 function parseBoolean(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === 'boolean') return value;
@@ -50,6 +56,7 @@ function parseBoolean(value) {
   return null;
 }
 
+// Normaliza el objeto usuario a un shape consistente para respuestas del panel
 function formatUser(user) {
   if (!user) return null;
   const id = user._id ? user._id.toString() : null;
@@ -81,10 +88,11 @@ function calculateTotalHours(actividad, attendedCount) {
   return Number((durationHours * attendedCount).toFixed(2));
 }
 
+// Calcula metricas de impacto (inscritos, confirmados, asistentes, horas)
 async function computeImpactMetrics(actividadId, actividadDoc = null) {
   const [totalInscripciones, inscripcionesActivas, registrosAsistencia] = await Promise.all([
     Inscripcion.countDocuments({ actividad: actividadId }),
-    Inscripcion.countDocuments({ actividad: actividadId, estado: 'activa' }),
+    Inscripcion.countDocuments({ actividad: actividadId, estado: { $in: ['activa', 'confirmado', 'inscrito'] } }),
     Attendance.find({ actividad: actividadId }).select('inscripciones').lean()
   ]);
 
@@ -110,6 +118,7 @@ async function computeImpactMetrics(actividadId, actividadDoc = null) {
   };
 }
 
+// Dashboard principal para admin/staff con metricas y resuemenes
 router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const now = new Date();
@@ -382,6 +391,7 @@ router.get('/panel', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
 });
 
 // Obtener todos los reportes de impacto
+// Lista de reportes de impacto existentes
 router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const reports = await ReporteImpacto.find({})
@@ -393,27 +403,27 @@ router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async 
     const formatted = reports.map((report) => ({
       _id: report._id,
       actividad: report.idActividad ? {
-          _id: report.idActividad._id,
-          titulo: report.idActividad.titulo,
-          area: report.idActividad.area,
-          tipo: report.idActividad.tipo,
-          fechaInicio: report.idActividad.fechaInicio,
-          fechaFin: report.idActividad.fechaFin,
-          estado: report.idActividad.estado
+        _id: report.idActividad._id,
+        titulo: report.idActividad.titulo,
+        area: report.idActividad.area,
+        tipo: report.idActividad.tipo,
+        fechaInicio: report.idActividad.fechaInicio,
+        fechaFin: report.idActividad.fechaFin,
+        estado: report.idActividad.estado
       } : null,
       metricas: report.metricas,
       creadoPor: report.creadoPor ? {
-          nombre: report.creadoPor.nombre,
-          correo: report.creadoPor.correoUniversitario
+        nombre: report.creadoPor.nombre,
+        correo: report.creadoPor.correoUniversitario
       } : null,
       creadoEn: report.creadoEn
     }));
 
-    // Calculate totals
+    // Calcula totales de reportes de impacto
     const totals = formatted.reduce((acc, curr) => {
-        acc.totalHoras += (curr.metricas.horasTotales || 0);
-        acc.totalBeneficiarios += (curr.metricas.beneficiarios || 0);
-        return acc;
+      acc.totalHoras += (curr.metricas.horasTotales || 0);
+      acc.totalBeneficiarios += (curr.metricas.beneficiarios || 0);
+      return acc;
     }, { totalHoras: 0, totalBeneficiarios: 0 });
 
     res.json({
@@ -427,6 +437,7 @@ router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async 
   }
 });
 
+// Crea un nuevo reporte de impacto para una actividad finalizada
 router.post('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { actividadId, beneficiarios, notas, horasTotales } = req.body || {};
@@ -501,6 +512,7 @@ router.post('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async
   }
 });
 
+// Exporta inscripciones a CSV
 router.get('/panel/export/enrollments', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const filters = {};
@@ -544,6 +556,7 @@ router.get('/panel/export/enrollments', ensureAuth, ensureRole(['admin', 'staff'
   }
 });
 
+// Exporta registros de asistencia a CSV
 router.get('/panel/export/attendance', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const filters = {};
@@ -601,6 +614,7 @@ router.get('/panel/export/attendance', ensureAuth, ensureRole(['admin', 'staff']
   }
 });
 
+// Exporta reportes de impacto a CSV
 router.get('/panel/export/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const reports = await ReporteImpacto.find({})
@@ -915,15 +929,15 @@ router.put('/impact-reports/:id', ensureAuth, ensureRole(['admin', 'staff']), as
     }
 
     if (horasTotales !== undefined && horasTotales !== null) {
-       const horasNum = Number(horasTotales);
-       if (!Number.isNaN(horasNum) && horasNum >= 0) {
-         report.metricas.horasTotales = horasNum;
-       }
+      const horasNum = Number(horasTotales);
+      if (!Number.isNaN(horasNum) && horasNum >= 0) {
+        report.metricas.horasTotales = horasNum;
+      }
     }
 
-    // Actualizar quien modificó si es necesario, o solo fecha
+    // Actualiza metadata de modificacion
     report.actualizadoEn = new Date();
-    
+
     await report.save();
 
     res.json({
@@ -936,7 +950,7 @@ router.put('/impact-reports/:id', ensureAuth, ensureRole(['admin', 'staff']), as
     res.status(500).json({ success: false, message: error.message });
   }
 });
-// ============== CREAR STAFF/ADMIN ==============
+// Crear staff/admin
 router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res) => {
   try {
     const { correoUniversitario, nombre, contrasena, rol, telefono, carrera } = req.body;

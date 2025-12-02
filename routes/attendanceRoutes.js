@@ -1,3 +1,4 @@
+// Rutas para gestionar listas y registros de asistencia
 const express = require('express');
 const path = require('path');
 const router = express.Router();
@@ -7,8 +8,7 @@ const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'
 const AttendanceModel = require(path.join(__dirname, '..', 'lib', 'AttendanceModel'));
 const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendance'));
 
-// POST /attendance/create
-// Body: { actividadId: "..." }
+// Crea una lista de asistencia para la actividad indicada
 router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const actividadId = req.body && (req.body.actividadId);
@@ -25,8 +25,7 @@ router.post('/create', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
   }
 });
 
-// POST /attendance/take
-// Body: { attendanceId: "...", presentes: [...], ausentes: [...], justificadas: [...] }
+// Registra asistencia indicando presentes/ausentes/justificadas
 router.post('/take', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const { attendanceId, presentes, ausentes, justificadas } = req.body;
@@ -50,8 +49,7 @@ router.post('/take', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
   }
 });
 
-// POST /attendance/update
-// Body: { attendanceId: "...", updates: [ { usuario: id, asistencia: 'presente' }, ... ] }
+// Actualiza entradas de asistencia puntualmente
 router.post('/update', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const attendanceId = req.body && (req.body.attendanceId);
@@ -71,9 +69,7 @@ router.post('/update', ensureAuth, ensureRole(['admin', 'staff']), async (req, r
   }
 });
 
-// POST /attendance/refresh
-// Body: { attendanceId: "..." }
-// Refreshes the attendance list by fetching active enrollments for the activity
+// Refresca la lista de asistencia con inscripciones activas de la actividad
 router.post('/refresh', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const attendanceId = req.body && (req.body.attendanceId);

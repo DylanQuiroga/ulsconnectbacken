@@ -1,21 +1,21 @@
+// Rutas para gestionar inscripciones de usuarios y admins
 const express = require('express');
 const path = require('path');
 const router = express.Router();
 const InscripcionModel = require(path.join(__dirname, '..', 'lib', 'inscripcionModel'));
-const { validateCSRFToken } = require(path.join(__dirname, '..', 'middleware', 'csrf'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 
-// Inscribirse en una actividad
-router.post('/:actividadId',  ensureAuth, async (req, res) => {
+// Inscribe al usuario autenticado en una actividad
+router.post('/:actividadId', ensureAuth, async (req, res) => {
   try {
     const usuarioId = req.session?.user?.id;
     const { actividadId } = req.params;
-    
+
     if (!usuarioId) {
-      return res.status(401).json({ success: false, error: 'usuario no autenticado' });
+      return res.status(401).json({ success: false, error: 'Usuario no autenticado' });
     }
-    
+
     const inscripcion = await InscripcionModel.crear(usuarioId, actividadId);
     res.status(201).json({ success: true, data: inscripcion });
   } catch (error) {
@@ -23,7 +23,7 @@ router.post('/:actividadId',  ensureAuth, async (req, res) => {
   }
 });
 
-// Obtener inscripciones del usuario
+// Obtiene inscripciones del usuario
 router.get('/:usuarioId', ensureAuth, async (req, res) => {
   try {
     const { usuarioId } = req.params;
@@ -34,7 +34,7 @@ router.get('/:usuarioId', ensureAuth, async (req, res) => {
   }
 });
 
-// Obtener inscripciones activas del usuario
+// Obtiene inscripciones activas del usuario
 router.get('/:usuarioId/activas', ensureAuth, async (req, res) => {
   try {
     const { usuarioId } = req.params;
@@ -45,7 +45,7 @@ router.get('/:usuarioId/activas', ensureAuth, async (req, res) => {
   }
 });
 
-// Obtener inscripciones de una actividad (solo admin/staff)
+// Obtiene inscripciones de una actividad (solo admin/staff)
 router.get('/actividad/:actividadId', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const inscripciones = await InscripcionModel.obtenerPorActividad(req.params.actividadId);
@@ -55,12 +55,12 @@ router.get('/actividad/:actividadId', ensureAuth, ensureRole(['admin', 'staff'])
   }
 });
 
-// Obtener una inscripción por ID
+// Obtiene una inscripcion por ID
 router.get('/detalle/:id', ensureAuth, async (req, res) => {
   try {
     const inscripcion = await InscripcionModel.obtenerPorId(req.params.id);
     if (!inscripcion) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada' });
+      return res.status(404).json({ success: false, error: 'Inscripcion no encontrada' });
     }
     res.status(200).json({ success: true, data: inscripcion });
   } catch (error) {
@@ -68,19 +68,18 @@ router.get('/detalle/:id', ensureAuth, async (req, res) => {
   }
 });
 
-// Cancelar inscripción
+// Cancela una inscripcion
 router.delete('/:id', ensureAuth, async (req, res) => {
   try {
     const { motivo } = req.body;
     const inscripcion = await InscripcionModel.cancelar(req.params.id, motivo);
     if (!inscripcion) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada' });
+      return res.status(404).json({ success: false, error: 'Inscripcion no encontrada' });
     }
-    res.status(200).json({ success: true, message: 'Inscripción cancelada correctamente', data: inscripcion });
+    res.status(200).json({ success: true, message: 'Inscripcion cancelada correctamente', data: inscripcion });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
 
 module.exports = router;

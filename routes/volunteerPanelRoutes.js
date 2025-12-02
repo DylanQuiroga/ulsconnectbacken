@@ -1,3 +1,4 @@
+// Rutas del panel de voluntario (resumen de inscripciones y puntaje)
 const express = require('express');
 const path = require('path');
 const router = express.Router();
@@ -6,9 +7,7 @@ const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'
 const Inscripcion = require(path.join(__dirname, '..', 'lib', 'schema', 'Inscripcion'));
 const userModel = require(path.join(__dirname, '..', 'lib', 'userModel'));
 
-/**
- * Normaliza fechas para evitar exponer objetos Date directos en la respuesta.
- */
+// Normaliza fechas para evitar exponer objetos Date directos en la respuesta
 function formatDate(value) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -16,9 +15,7 @@ function formatDate(value) {
   return date.toISOString();
 }
 
-/**
- * Determina si una actividad es proxima u ocurre actualmente.
- */
+// Determina si una actividad es proxima u ocurre actualmente
 function isUpcomingActivity(enrollmentDetail, now) {
   const start = enrollmentDetail.startDate ? new Date(enrollmentDetail.startDate) : null;
   const end = enrollmentDetail.endDate ? new Date(enrollmentDetail.endDate) : null;
@@ -65,6 +62,29 @@ router.get('/panel', ensureAuth, async (req, res) => {
       };
     });
 
+    const enrollments = inscripciones.map((inscripcion) => {
+      const actividad = inscripcion.actividad || null;
+      const attendanceCount = Array.isArray(inscripcion.registrosAsistencia) ? inscripcion.registrosAsistencia.length : 0;
+
+      return {
+        enrollmentId: inscripcion._id ? inscripcion._id.toString() : null,
+        activityId: actividad && actividad._id ? actividad._id.toString() : null,
+        activityTitle: actividad ? actividad.titulo : 'Actividad no disponible',
+        activityType: actividad ? actividad.tipo : null,
+        area: actividad ? actividad.area : null,
+        location: actividad && actividad.ubicacion ? {
+          nombreComuna: actividad.ubicacion.nombreComuna,
+          nombreLugar: actividad.ubicacion.nombreLugar,
+          lng: actividad.ubicacion.lng
+        } : null,
+        startDate: actividad ? formatDate(actividad.fechaInicio) : null,
+        endDate: actividad ? formatDate(actividad.fechaFin) : null,
+        activityStatus: actividad ? actividad.estado : null,
+        inscripcionStatus: inscripcion.estado,
+        attendanceCount
+      };
+    });
+
     const now = new Date();
     const upcoming = detailedInscripciones
       .filter((inscripcionDetail) => isUpcomingActivity(inscripcionDetail, now))
@@ -86,7 +106,8 @@ router.get('/panel', ensureAuth, async (req, res) => {
       panel: {
         summary,
         upcoming,
-        inscripciones: detailedInscripciones
+        inscripciones: detailedInscripciones,
+        enrollments
       }
     });
   } catch (error) {

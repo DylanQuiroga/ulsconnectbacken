@@ -16,16 +16,17 @@ async function ensureAdmin() {
   await require('../lib/db').connect();
 
   let user = await Usuario.findOne({ correoUniversitario: USER_EMAIL });
+  const hash = await bcrypt.hash(USER_PASS, 10);
+
   if (user) {
-    if (user.rol !== 'admin') {
-      user.rol = 'admin';
-      await user.save();
-    }
+    user.rol = 'admin';
+    user.contrasena = hash;
+    user.bloqueado = false;
+    await user.save();
     return;
   }
 
-  const hash = await bcrypt.hash(USER_PASS, 10);
-  const u = new Usuario({ correoUniversitario: USER_EMAIL, contrasena: hash, nombre: USER_NAME, rol: 'admin' });
+  const u = new Usuario({ correoUniversitario: USER_EMAIL, contrasena: hash, nombre: USER_NAME, rol: 'admin', bloqueado: false });
   await u.save();
 }
 
