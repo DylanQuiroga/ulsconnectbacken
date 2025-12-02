@@ -1,0 +1,15 @@
+[dotenv@17.2.3] injecting env (13) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+Server running on port 3000
+Available at: http://localhost:3000
+Available at: http://127.0.0.1:3000
+Connected to MongoDB
+Validando CSRF: {
+  sessionToken: '379e2a296e...',
+  requestToken: 'none',
+  cookieToken: '379e2a296e...'
+}
+Validando CSRF: {
+  sessionToken: 'ddc1445a53...',
+  requestToken: 'b9fec6b4fa...',
+  cookieToken: '379e2a296e...'
+}

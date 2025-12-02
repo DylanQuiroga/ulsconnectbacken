@@ -17,12 +17,24 @@ router.get('/signup', (req, res) => {
     });
 });
 
+// Dominios de correo permitidos
+const ALLOWED_DOMAINS = ['userena.cl', 'alumnouls.cl'];
+
+function isInstitutionalEmail(email) {
+    const domain = email.split('@')[1] || '';
+    return ALLOWED_DOMAINS.includes(domain);
+}
+
 // POST /signup - Crea una solicitud de registro para aprobacion
 router.post('/signup', async (req, res) => {
     const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body || {};
 
     if (!correoUniversitario || !contrasena || !nombre) {
         return res.status(400).json({ success: false, message: 'Correo, nombre y contrasena son requeridos' });
+    }
+
+    if (!isInstitutionalEmail(correoUniversitario)) {
+        return res.status(400).json({ success: false, message: 'Solo correos @userena.cl o @alumnouls.cl son permitidos' });
     }
 
     try {

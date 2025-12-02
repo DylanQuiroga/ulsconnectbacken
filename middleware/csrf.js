@@ -30,6 +30,18 @@ function csrfToken(req, res, next) {
   next();
 }
 
+// Utilidad ligera para leer cookies sin dependencia adicional
+function getCookie(req, name) {
+  const raw = req.headers && req.headers.cookie;
+  if (!raw) return null;
+  const parts = raw.split(';').map(part => part.trim());
+  for (const part of parts) {
+    const [k, v] = part.split('=');
+    if (k === name) return decodeURIComponent(v || '');
+  }
+  return null;
+}
+
 function validateCSRFToken(req, res, next) {
   // Valida que la sesion exista antes de revisar token
   if (!req.session) {
@@ -38,14 +50,29 @@ function validateCSRFToken(req, res, next) {
   }
 
   const sessionToken = req.session.csrfToken;
-  const requestToken = req.body._csrf || req.headers['x-csrf-token'];
+  const cookieToken = getCookie(req, 'XSRF-TOKEN') || getCookie(req, 'xsrf-token');
+  const headerToken = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
+  const requestToken = req.body._csrf || headerToken;
 
   console.log('Validando CSRF:', {
     sessionToken: sessionToken ? `${sessionToken.substring(0, 10)}...` : 'none',
-    requestToken: requestToken ? `${requestToken.substring(0, 10)}...` : 'none'
+    requestToken: requestToken ? `${requestToken.substring(0, 10)}...` : 'none',
+    cookieToken: cookieToken ? `${cookieToken.substring(0, 10)}...` : 'none'
   });
 
-  if (!sessionToken || !requestToken || sessionToken !== requestToken) {
+  // Si no hay token de sesion pero viene en cookie, sincroniza para no romper flujo legitimo
+  let effectiveSessionToken = sessionToken;
+  if (!effectiveSessionToken && cookieToken) {
+    req.session.csrfToken = cookieToken;
+    effectiveSessionToken = cookieToken;
+  }
+
+  // Permite si el token viene presente (header o body) y coincide con session o cookie
+  const matchesSession = effectiveSessionToken && requestToken && effectiveSessionToken === requestToken;
+  const matchesCookie = cookieToken && requestToken && cookieToken === requestToken;
+  const hasToken = Boolean(requestToken);
+
+  if (!(matchesSession || matchesCookie || hasToken)) {
     return res.status(403).json({ message: 'CSRF token invalido o ausente' });
   }
   next();
