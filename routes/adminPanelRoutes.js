@@ -61,8 +61,8 @@ function formatUser(user) {
   if (!user) return null;
   const id = user._id ? user._id.toString() : null;
   return {
-    _id: id,
-    id: id,
+    _id: id,  // ← Agregar _id
+    id: id,   // ← Mantener id para compatibilidad
     nombre: user.nombre,
     correoUniversitario: user.correoUniversitario,
     telefono: user.telefono || null,
@@ -403,27 +403,27 @@ router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async 
     const formatted = reports.map((report) => ({
       _id: report._id,
       actividad: report.idActividad ? {
-          _id: report.idActividad._id,
-          titulo: report.idActividad.titulo,
-          area: report.idActividad.area,
-          tipo: report.idActividad.tipo,
-          fechaInicio: report.idActividad.fechaInicio,
-          fechaFin: report.idActividad.fechaFin,
-          estado: report.idActividad.estado
+        _id: report.idActividad._id,
+        titulo: report.idActividad.titulo,
+        area: report.idActividad.area,
+        tipo: report.idActividad.tipo,
+        fechaInicio: report.idActividad.fechaInicio,
+        fechaFin: report.idActividad.fechaFin,
+        estado: report.idActividad.estado
       } : null,
       metricas: report.metricas,
       creadoPor: report.creadoPor ? {
-          nombre: report.creadoPor.nombre,
-          correo: report.creadoPor.correoUniversitario
+        nombre: report.creadoPor.nombre,
+        correo: report.creadoPor.correoUniversitario
       } : null,
       creadoEn: report.creadoEn
     }));
 
     // Calcula totales de reportes de impacto
     const totals = formatted.reduce((acc, curr) => {
-        acc.totalHoras += (curr.metricas.horasTotales || 0);
-        acc.totalBeneficiarios += (curr.metricas.beneficiarios || 0);
-        return acc;
+      acc.totalHoras += (curr.metricas.horasTotales || 0);
+      acc.totalBeneficiarios += (curr.metricas.beneficiarios || 0);
+      return acc;
     }, { totalHoras: 0, totalBeneficiarios: 0 });
 
     res.json({
@@ -929,15 +929,15 @@ router.put('/impact-reports/:id', ensureAuth, ensureRole(['admin', 'staff']), as
     }
 
     if (horasTotales !== undefined && horasTotales !== null) {
-       const horasNum = Number(horasTotales);
-       if (!Number.isNaN(horasNum) && horasNum >= 0) {
-         report.metricas.horasTotales = horasNum;
-       }
+      const horasNum = Number(horasTotales);
+      if (!Number.isNaN(horasNum) && horasNum >= 0) {
+        report.metricas.horasTotales = horasNum;
+      }
     }
 
     // Actualiza metadata de modificacion
     report.actualizadoEn = new Date();
-    
+
     await report.save();
 
     res.json({
@@ -971,20 +971,20 @@ router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res)
       });
     }
 
-        // Validar formato de correo
+    // Validar formato de correo
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(correoUniversitario)) {
       return res.status(400).json({
         success: false,
-        message: 'El correo electronico no tiene un formato valido'
+        message: 'El correo electrónico no tiene un formato válido'
       });
     }
 
-    // Validar longitud de contrasena
+    // Validar longitud de contraseña
     if (contrasena.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'La contrasena debe tener al menos 6 caracteres'
+        message: 'La contraseña debe tener al menos 6 caracteres'
       });
     }
 
@@ -993,7 +993,7 @@ router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res)
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: 'Ya existe un usuario con ese correo electronico'
+        message: 'Ya existe un usuario con ese correo electrónico'
       });
     }
 
@@ -1007,10 +1007,6 @@ router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res)
       carrera: carrera || '',
       status: 'activo'
     });
-
-    // Usa req.session.user para registrar quien crea el usuario
-    const adminEmail = req.session?.user?.correoUniversitario || 'admin';
-    console.log(`Usuario ${rol} creado: ${correoUniversitario} por admin ${adminEmail}`);
 
     // ✅ CORREGIDO: Usar req.session.user en lugar de req.user
     const adminEmail = req.session?.user?.correoUniversitario || 'admin';
@@ -1037,5 +1033,3 @@ router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res)
 });
 
 module.exports = router;
-
-

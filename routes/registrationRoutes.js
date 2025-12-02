@@ -4,44 +4,36 @@ const router = express.Router();
 const path = require('path');
 const { body, param, validationResult } = require('express-validator');
 const RegistrationRequest = require(path.join(__dirname, '..', 'lib', 'schema', 'RegistrationRequest'));
+const ensureAuth = require('../middleware/ensureAuth');
 const ensureRole = require('../middleware/ensureRole');
 const { validateCSRFToken } = require('../middleware/csrf');
 const userModel = require('../lib/userModel');
-const {
-  sendRegistrationRequestNotification,
-  sendRegistrationApprovedNotification,
-  sendRegistrationRejectedNotification
-} = require('../lib/emailService');
+const { sendRegistrationRequestNotification, sendRegistrationApprovedNotification, sendRegistrationRejectedNotification } = require('../lib/emailService');
 
 // Dominios de correo permitidos
+// Allowed institutional email domains
 const ALLOWED_DOMAINS = ['userena.cl', 'alumnouls.cl'];
 
 // Valida que el correo pertenezca a los dominios institucionales
-const isInstitutionalEmail = (email) => {
+function isInstitutionalEmail(email) {
   const domain = email.split('@')[1];
   return ALLOWED_DOMAINS.includes(domain);
-};
+}
 
-// Validaciones comunes para crear solicitud de registro
-const validators = [
-  body('correoUniversitario')
-    .isEmail()
-    .withMessage('Correo invalido')
-    .custom((email) => {
-      if (!isInstitutionalEmail(email)) {
-        throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
-      }
-      return true;
-    }),
-  body('contrasena').isLength({ min: 6 }).withMessage('Contrasena minima 6 caracteres'),
+router.post('/request', validateCSRFToken, [
+  body('correoUniversitario').isEmail().withMessage('Correo inválido').custom(email => {
+    if (!isInstitutionalEmail(email)) {
+      throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
+    }
+    return true;
+  }),
+  body('contrasena').isLength({ min: 6 }).withMessage('Contraseña mínima 6 caracteres'),
   body('nombre').isString().notEmpty().withMessage('Nombre requerido')
-];
-
 // Solicitud de registro de estudiante (queda pendiente hasta aprobacion de admin/staff)
-router.post('/request', validateCSRFToken, validators, async (req, res) => {
+  // Solicitud de registro de estudiante (queda pendiente hasta aprobacion de admin/staff)
+], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
   const { correoUniversitario, contrasena, nombre, telefono, carrera, intereses, comuna, direccion, edad, status } = req.body;
   try {
     const existing = await userModel.findByCorreo(correoUniversitario);
@@ -73,29 +65,39 @@ router.post('/request', validateCSRFToken, validators, async (req, res) => {
   }
 });
 
-const listPendingRequests = async (_req, res) => {
+// Admin/Staff: list pending requests
+router.get('/requests', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const items = await RegistrationRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
     res.json(items);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error obteniendo solicitudes' });
+    res.status(500).json({ message: 'Error fetching requests' });
   }
-};
 
-router.get('/requests', ensureRole(['admin', 'staff']), listPendingRequests);
-router.get('/registration/requests', ensureRole(['admin', 'staff']), listPendingRequests);
+router.get('/registration/requests', ensureRole(['admin', 'staff']), async (req, res) => {
+  try {
+    const items = await RegistrationRequest.find({ status: 'pending' }).sort({ createdAt: 1 }).lean();
+    res.json(items);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching requests' });
+  }
+});
+
+// Approve request
+router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], async (req, res) => {
 
 // Aprobar solicitud pendiente: crea usuario y marca revisado
-const approveRequest = async (req, res) => {
+  // Aprobar solicitud pendiente: crea usuario y marca revisado
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
     const id = req.params.id;
     const reqDoc = await RegistrationRequest.findById(id);
-    if (!reqDoc) return res.status(404).json({ message: 'Solicitud no encontrada' });
-    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'La solicitud no esta pendiente' });
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
 
     const created = await userModel.createUserFromHash({
       correoUniversitario: reqDoc.correoUniversitario,
@@ -117,23 +119,60 @@ const approveRequest = async (req, res) => {
 
     sendRegistrationApprovedNotification(reqDoc.correoUniversitario, reqDoc.nombre);
 
-    res.json({ message: 'Aprobada', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
+    res.json({ message: 'Approved', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error al aprobar solicitud' });
+    res.status(500).json({ message: 'Error approving request' });
   }
-};
+});
 
-// Rechazar solicitud pendiente: registra nota y envia aviso
-const rejectRequest = async (req, res) => {
+router.post('/registration/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], async (req, res) => {
+  // duplicate of approve handler:
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
   try {
     const id = req.params.id;
     const reqDoc = await RegistrationRequest.findById(id);
-    if (!reqDoc) return res.status(404).json({ message: 'Solicitud no encontrada' });
-    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'La solicitud no esta pendiente' });
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
+
+    const created = await userModel.createUserFromHash({
+      correoUniversitario: reqDoc.correoUniversitario,
+      contrasenaHash: reqDoc.contrasenaHash,
+      nombre: reqDoc.nombre,
+      telefono: reqDoc.telefono,
+      carrera: reqDoc.carrera,
+      intereses: reqDoc.intereses,
+      comuna: reqDoc.comuna || '',
+      direccion: reqDoc.direccion || '',
+      edad: reqDoc.edad || null,
+      status: reqDoc.status || ''
+    });
+
+    reqDoc.status = 'approved';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    await reqDoc.save();
+
+    sendRegistrationApprovedNotification(reqDoc.correoUniversitario, reqDoc.nombre);
+
+    res.json({ message: 'Approved', user: { id: created._id, correoUniversitario: created.correoUniversitario } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error approving request' });
+  }
+});
+
+// Rechazar solicitud pendiente: registra nota y envia aviso
+// Reject request
+router.post('/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id').isMongoId(), body('notes').optional().isString()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
 
     reqDoc.status = 'rejected';
     reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
@@ -143,27 +182,35 @@ const rejectRequest = async (req, res) => {
 
     sendRegistrationRejectedNotification(reqDoc.correoUniversitario, reqDoc.nombre, req.body.notes);
 
-    res.json({ message: 'Rechazada' });
+    res.json({ message: 'Rejected' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Error al rechazar solicitud' });
+    res.status(500).json({ message: 'Error rejecting request' });
   }
-};
+});
 
-router.post('/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], approveRequest);
-router.post('/registration/requests/:id/approve', ensureRole(['admin', 'staff']), [param('id').isMongoId()], approveRequest);
+router.post('/registration/requests/:id/reject', ensureRole(['admin', 'staff']), [param('id').isMongoId(), body('notes').optional().isString()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const id = req.params.id;
+    const reqDoc = await RegistrationRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ message: 'Not found' });
+    if (reqDoc.status !== 'pending') return res.status(400).json({ message: 'Request not pending' });
 
-router.post(
-  '/requests/:id/reject',
-  ensureRole(['admin', 'staff']),
-  [param('id').isMongoId(), body('notes').optional().isString()],
-  rejectRequest
-);
-router.post(
-  '/registration/requests/:id/reject',
-  ensureRole(['admin', 'staff']),
-  [param('id').isMongoId(), body('notes').optional().isString()],
-  rejectRequest
-);
+    reqDoc.status = 'rejected';
+    reqDoc.reviewedBy = req.session && req.session.user ? req.session.user.id : null;
+    reqDoc.reviewedAt = new Date();
+    reqDoc.reviewNotes = req.body.notes || '';
+    await reqDoc.save();
+
+    sendRegistrationRejectedNotification(reqDoc.correoUniversitario, reqDoc.nombre, req.body.notes);
+
+    res.json({ message: 'Rejected' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error rejecting request' });
+  }
+});
 
 module.exports = router;
