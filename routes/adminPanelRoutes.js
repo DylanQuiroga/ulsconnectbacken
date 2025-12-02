@@ -92,7 +92,7 @@ function calculateTotalHours(actividad, attendedCount) {
 async function computeImpactMetrics(actividadId, actividadDoc = null) {
   const [totalInscripciones, inscripcionesActivas, registrosAsistencia] = await Promise.all([
     Inscripcion.countDocuments({ actividad: actividadId }),
-    Inscripcion.countDocuments({ actividad: actividadId, estado: 'activa' }),
+    Inscripcion.countDocuments({ actividad: actividadId, estado: { $in: ['activa', 'confirmado', 'inscrito'] } }),
     Attendance.find({ actividad: actividadId }).select('inscripciones').lean()
   ]);
 
