@@ -74,6 +74,7 @@ router.get('/requests', ensureRole(['admin', 'staff']), async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Error fetching requests' });
   }
+});
 
 router.get('/registration/requests', ensureRole(['admin', 'staff']), async (req, res) => {
   try {
