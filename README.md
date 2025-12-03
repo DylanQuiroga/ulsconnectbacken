@@ -93,7 +93,7 @@ El propósito de esta página es permitir a los administradores publicar, admini
     # Configuración de sesion
     SESSION_SECRET=dev-secret
     
-    # Configuración de Email (opcional con cuenta de Ethereal)
+    # Configuración de Email, se puede usar Ethereal para pruebas (opcional: Backend omite configuración smtp)
     SMTP_HOST= smtp.ethereal.email
     SMTP_PORT= 587
     SMTP_USER= [user ethereal]
