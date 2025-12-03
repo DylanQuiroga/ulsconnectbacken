@@ -57,7 +57,11 @@ function validateCSRFToken(req, res, next) {
   console.log('Validando CSRF:', {
     sessionToken: sessionToken ? `${sessionToken.substring(0, 10)}...` : 'none',
     requestToken: requestToken ? `${requestToken.substring(0, 10)}...` : 'none',
-    cookieToken: cookieToken ? `${cookieToken.substring(0, 10)}...` : 'none'
+    cookieToken: cookieToken ? `${cookieToken.substring(0, 10)}...` : 'none',
+    headers: {
+        'x-csrf-token': req.headers['x-csrf-token'] ? 'present' : 'missing',
+        'x-xsrf-token': req.headers['x-xsrf-token'] ? 'present' : 'missing'
+    }
   });
 
   // Si no hay token de sesion pero viene en cookie, sincroniza para no romper flujo legitimo
