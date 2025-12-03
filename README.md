@@ -110,7 +110,7 @@ El propósito de esta página es permitir a los administradores publicar, admini
     CSRF_TOKEN_LENGTH=32
   
     ```
-## ▶️Executar aplicación.
+## ▶️Ejecutar aplicación.
 Para iniciar la aplicación abre powershell o cmd en la raíz del proyecto (donde se encuentra el archivo app.js) y ocupa los siguiente comandos:
 1. Instala librerías de JavaScript del proyecto:
     ```
