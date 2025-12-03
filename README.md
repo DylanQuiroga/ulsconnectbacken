@@ -93,14 +93,14 @@ El propósito de esta página es permitir a los administradores publicar, admini
     # Configuración de sesion
     SESSION_SECRET=dev-secret
     
-    # Configuración de Email (opcional)
-    SMTP_HOST= [opcional]
+    # Configuración de Email (opcional con cuenta de Ethereal)
+    SMTP_HOST= smtp.ethereal.email
     SMTP_PORT= 587
-    SMTP_USER= [opcional]
-    SMTP_PASS= [opcional]
-    SMTP_FROM = [opcional]
+    SMTP_USER= [user ethereal]
+    SMTP_PASS= [contraseña ethereal]
+    SMTP_FROM = [correo por el que se envia]
     
-    ADMIN_EMAIL= [opcional]
+    ADMIN_EMAIL= [correo de administrador]
     
     # Limite de peticiones
     RATE_LIMIT_WINDOW_MS=900000
@@ -110,7 +110,7 @@ El propósito de esta página es permitir a los administradores publicar, admini
     CSRF_TOKEN_LENGTH=32
   
     ```
-## ▶️Executar aplicación.
+## ▶️Ejecutar aplicación.
 Para iniciar la aplicación abre powershell o cmd en la raíz del proyecto (donde se encuentra el archivo app.js) y ocupa los siguiente comandos:
 1. Instala librerías de JavaScript del proyecto:
     ```
