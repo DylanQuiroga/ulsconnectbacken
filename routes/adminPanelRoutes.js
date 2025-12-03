@@ -1009,9 +1009,8 @@ router.post('/users/create', ensureAuth, ensureRole(['admin']), async (req, res)
       status: 'activo'
     });
 
-    // ✅ CORREGIDO: Usar req.session.user en lugar de req.user
     const adminEmail = req.session?.user?.correoUniversitario || 'admin';
-    console.log(`✅ Usuario ${rol} creado: ${correoUniversitario} por admin ${adminEmail}`);
+    console.log(`Usuario ${rol} creado: ${correoUniversitario} por admin ${adminEmail}`);
 
     res.status(201).json({
       success: true,
