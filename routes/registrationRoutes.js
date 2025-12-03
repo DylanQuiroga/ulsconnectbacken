@@ -20,7 +20,7 @@ function isInstitutionalEmail(email) {
   return ALLOWED_DOMAINS.includes(domain);
 }
 
-router.post('/request', validateCSRFToken, [
+router.post('/request', [
   body('correoUniversitario').isEmail().withMessage('Correo inválido').custom(email => {
     if (!isInstitutionalEmail(email)) {
       throw new Error('Solo correos @userena.cl o @alumnouls.cl son permitidos');
