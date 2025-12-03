@@ -396,7 +396,7 @@ router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async 
   try {
     const reports = await ReporteImpacto.find({})
       .sort({ creadoEn: -1 })
-      .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado')
+      .populate('idActividad', 'titulo area tipo fechaInicio fechaFin estado capacidad')
       .populate('creadoPor', 'nombre correoUniversitario rol')
       .lean();
 
@@ -409,7 +409,8 @@ router.get('/impact-reports', ensureAuth, ensureRole(['admin', 'staff']), async 
         tipo: report.idActividad.tipo,
         fechaInicio: report.idActividad.fechaInicio,
         fechaFin: report.idActividad.fechaFin,
-        estado: report.idActividad.estado
+        estado: report.idActividad.estado,
+        capacidad: report.idActividad.capacidad
       } : null,
       metricas: report.metricas,
       creadoPor: report.creadoPor ? {
