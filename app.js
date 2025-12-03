@@ -61,15 +61,26 @@ app.use(express.json());
 // Confía en el proxy inverso (necesario para cookies seguras en producción/Leapcell)
 app.set('trust proxy', 1);
 
+// Determina el entorno
+const isProduction = process.env.NODE_ENV === 'production';
+console.log('🔒 Security Config:', { 
+    isProduction, 
+    NODE_ENV: process.env.NODE_ENV,
+    cookieSettings: {
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax'
+    }
+});
+
 // Configuracion de sesion con store MongoDB (debe ir antes del middleware csrfToken)
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // true en produccion (requiere HTTPS)
+        secure: isProduction, // true en produccion (requiere HTTPS)
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' para cross-site en producción
+        sameSite: isProduction ? 'none' : 'lax', // 'none' para cross-site en producción
         maxAge: 24 * 60 * 60 * 1000 // 24 horas
     }
 };
@@ -96,8 +107,8 @@ app.get('/csrf-token', (req, res) => {
     // Guarda el token en una cookie accesible desde JavaScript
     res.cookie('XSRF-TOKEN', token, {
         httpOnly: false, // Importante: false para que JS pueda leerla
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 24 horas
     });
 
