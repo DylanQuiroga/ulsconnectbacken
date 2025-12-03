@@ -23,7 +23,7 @@ function csrfToken(req, res, next) {
   res.cookie('XSRF-TOKEN', req.session.csrfToken, {
     httpOnly: false, // false para que JavaScript pueda leerla
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000
   });
 
