@@ -5,35 +5,35 @@ const path = require('path');
 const helmet = require('helmet');
 const MongoStore = require('connect-mongo');
 const cors = require('cors');
-// Import fs-extra module for file operations
+// Importa fs-extra para operaciones de archivos
 const fs = require('fs-extra');
-// Import markdown-it for Markdown to HTML conversion
+// Importa markdown-it para convertir Markdown a HTML
 const md = require('markdown-it')();
-// Import front-matter for parsing metadata
+// Importa front-matter para parsear metadatos
 const fm = require('front-matter');
-// Import promisify to convert callback functions to promises
+// Importa promisify para convertir callbacks a promesas
 const { promisify } = require('util');
-// Promisify fs.stat function
+// Promisifica la funcion fs.stat
 const stat = promisify(fs.stat);
 
-// Security and middleware
+// Seguridad y middleware
 const session = require('express-session');
 const { authLimiter } = require('./middleware/rateLimiter');
 const { csrfToken, validateCSRFToken } = require('./middleware/csrf');
 const { initEmailService } = require('./lib/emailService');
 const db = require('./lib/db');
 
-// CORS configuration with dynamic origin validation
+// Configuracion de CORS con validacion dinamica de origen
 app.use(cors({
     origin: function (origin, callback) {
         const allowed = (process.env.FRONTEND_ORIGIN || '')
             .split(',')
             .map(o => o.trim());
 
-        // Add localhost for development
+        // Agrega localhost para desarrollo
         allowed.push('http://localhost:5173', 'http://localhost:5174');
 
-        // Allow requests with no origin (mobile apps, Postman, curl)
+        // Permite solicitudes sin origen (apps moviles, Postman, curl)
         if (!origin) return callback(null, true);
 
         if (allowed.includes(origin)) return callback(null, true);
@@ -46,35 +46,35 @@ app.use(cors({
     exposedHeaders: ['X-CSRF-Token']
 }));
 
-// Security headers
+// Cabeceras de seguridad
 app.use(helmet());
 
-// Serve static images
+// Sirve imagenes estaticas
 app.use('/images', express.static(path.join(__dirname, 'images')));
 
-// Body parsing for form submissions
+// Parseo de body para formularios
 app.use(express.urlencoded({ extended: true }));
 
-// JSON body parser for APIs
+// Parseo de JSON para APIs
 app.use(express.json());
 
-// Session configuration with MongoDB store (MUST come before csrfToken middleware)
+// Configuracion de sesion con store MongoDB (debe ir antes del middleware csrfToken)
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // true in production (requires HTTPS)
+        secure: process.env.NODE_ENV === 'production', // true en produccion (requiere HTTPS)
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: 24 * 60 * 60 * 1000 // 24 horas
     }
 };
 
-// Configure MongoDB-backed session store immediately so Express-session never falls back to memory
+// Configura el store de sesion en MongoDB para evitar fallback a memoria
 try {
     sessionConfig.store = MongoStore.create({
         mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ulsconnect',
-        touchAfter: 24 * 3600 // lazy session update (24 hours)
+        touchAfter: 24 * 3600 // actualizacion perezosa de sesion (24 horas)
     });
 } catch (err) {
     console.warn('⚠️  MongoDB session store unavailable, using memory store');
@@ -82,16 +82,16 @@ try {
 
 app.use(session(sessionConfig));
 
-// CSRF token middleware (generate tokens for all requests) - MUST come after session
+// Middleware CSRF (genera tokens para todas las solicitudes) - debe ir despues de la sesion
 app.use(csrfToken);
 
-// ✅ NUEVO: Endpoint para obtener el token CSRF
+// Endpoint para obtener el token CSRF
 app.get('/csrf-token', (req, res) => {
     const token = req.session.csrfToken || res.locals.csrfToken;
 
-    // Guardar el token en una cookie accesible desde JavaScript
+    // Guarda el token en una cookie accesible desde JavaScript
     res.cookie('XSRF-TOKEN', token, {
-        httpOnly: false, // ✅ IMPORTANTE: false para que JS pueda leerla
+        httpOnly: false, // Importante: false para que JS pueda leerla
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 24 horas
@@ -103,23 +103,23 @@ app.get('/csrf-token', (req, res) => {
     });
 });
 
-// Initialize email service
+// Inicializa el servicio de correo
 initEmailService();
 
-// Apply rate limiting to auth endpoints
+// Aplica rate limiting a endpoints de autenticacion
 app.post('/signup', authLimiter);
 app.post('/login', authLimiter);
 
-// Mount auth routes (created separately)
+// Monta rutas de autenticacion
 try {
     const authRouter = require(path.join(__dirname, 'routes', 'auth'));
     app.use('/', authRouter);
 } catch (err) {
-    // If the routes file doesn't exist yet, ignore so app still runs
+    // Si el archivo de rutas no existe, ignora para que la app siga corriendo
     console.warn('Auth routes not available:', err && err.message ? err.message : err);
 }
 
-// Mount registration routes (student requests + admin approvals)
+// Monta rutas de registro (solicitudes de estudiantes y aprobaciones)
 try {
     const registrationRouter = require(path.join(__dirname, 'routes', 'registrationRoutes'));
     app.use('/auth', registrationRouter);
@@ -132,10 +132,10 @@ try {
     app.use('/events', activityRouter);
     app.use('/api/activities', activityRouter);
 } catch (err) {
-    // If the routes file doesn't exist yet, ignore so app still runs
+    // Si el archivo de rutas no existe, ignora para que la app siga corriendo
 }
 
-// Mount volunteer panel routes (student dashboard)
+// Monta rutas del panel de voluntarios
 try {
     const volunteerPanelRouter = require(path.join(__dirname, 'routes', 'volunteerPanelRoutes'));
     app.use('/volunteer', volunteerPanelRouter);
@@ -143,7 +143,7 @@ try {
     console.warn('Volunteer panel routes not available:', err && err.message ? err.message : err);
 }
 
-// Mount admin/coordinator panel routes
+// Monta rutas del panel de admin/coordinador
 try {
     const adminPanelRouter = require(path.join(__dirname, 'routes', 'adminPanelRoutes'));
     app.use('/admin', adminPanelRouter);
@@ -151,15 +151,15 @@ try {
     console.warn('Admin panel routes not available:', err && err.message ? err.message : err);
 }
 
-// Mount inscription routes
+// Monta rutas de inscripcion
 try {
     const inscripcionRoutes = require(path.join(__dirname, 'routes', 'inscripcionRoutes'));
     app.use('/inscripciones', inscripcionRoutes);
 } catch (err) {
-    // If the routes file doesn't exist yet, ignore so app still runs
+    // Si el archivo de rutas no existe, ignora para que la app siga corriendo
 }
 
-// Mount attendance routes (attendance management)
+// Monta rutas de asistencia
 try {
     const attendanceRoutes = require(path.join(__dirname, 'routes', 'attendanceRoutes'));
     app.use('/attendance', attendanceRoutes);
@@ -167,56 +167,60 @@ try {
     console.warn('Attendance routes not available:', err && err.message ? err.message : err);
 }
 
-// Try connecting to DB at startup so errors are visible early
+// Intenta conectar a la BD al inicio para ver errores temprano
 db.connect().then(() => {
     console.log('Connected to MongoDB');
 }).catch(err => {
     console.warn('Warning: could not connect to MongoDB. Auth will fail without a DB.');
-    // log error for debugging
+    // Registra el error para depuracion
     console.warn(err && err.message ? err.message : err);
 });
 
-// Fetch blog posts
+// Obtiene entradas del blog
 async function getBlogPosts() {
-    // Define content directory path
+    // Define la ruta del directorio de contenido
     const contentDir = path.join(__dirname, 'content');
-    // Read files in content directory
+    // Si el directorio no existe, devuelve un arreglo vacio
+    const exists = await fs.pathExists(contentDir);
+    if (!exists) return [];
+
+    // Lee archivos en el directorio de contenido
     const files = await fs.readdir(contentDir);
     const posts = [];
 
     for (const file of files) {
         if (file.endsWith('.md')) {
-            // Get file path
+            // Obtiene la ruta del archivo
             const filePath = path.join(contentDir, file);
-            // Read file content
+            // Lee el contenido del archivo
             const fileContent = await fs.readFile(filePath, 'utf8');
-            // Parse front-matter
+            // Parsea el front-matter
             const { attributes, body } = fm(fileContent);
 
-            // Get summary
+            // Calcula el resumen
             const maxContentLength = 200;
             let summary = body;
             if (body.length > maxContentLength) {
                 summary = summary.substring(0, maxContentLength) + '...';
             }
-            // Convert Markdown to HTML
+            // Convierte Markdown a HTML
             const htmlContent = md.render(body);
-            // Get file stats
+            // Obtiene estadisticas del archivo
             const stats = await stat(filePath);
-            // Get file creation date
+            // Obtiene la fecha de creacion
             let creationDate = new Date(stats.ctime);
             if (attributes.date) {
                 creationDate = new Date(attributes.date);
             }
-            // Get slug from file name
+            // Genera el slug desde el nombre del archivo
             const slug = file.replace('.md', '').replace(/ /g, '-');
 
-            // Create post object
+            // Crea el objeto post
             const post = {
                 title: attributes.title || file.replace('.md', ''),
-                summary: attributes.summary || summary, // Use summary if available
+                summary: attributes.summary || summary, // Usa el resumen si esta disponible
                 content: htmlContent,
-                dateString: creationDate.toISOString(), // Convert date to string
+                dateString: creationDate.toISOString(), // Convierte la fecha a string
                 date: creationDate,
                 tags: attributes.tags || [],
                 slug: slug,
@@ -225,12 +229,12 @@ async function getBlogPosts() {
         }
     }
 
-    // Sort posts by creation date in descending order
+    // Ordena los posts por fecha de creacion descendente
     posts.sort((a, b) => b.date - a.date);
     return posts;
 }
 
-// Home page route - Returns available posts as JSON
+// Ruta raiz - devuelve las entradas disponibles como JSON
 app.get('/', async (req, res) => {
     try {
         const posts = await getBlogPosts();
@@ -252,7 +256,7 @@ app.get('/', async (req, res) => {
     }
 });
 
-// Single post route - Returns full post content as JSON
+// Ruta de post individual - devuelve el contenido completo como JSON
 app.get('/blog/:postTitle', async (req, res) => {
     try {
         const postTitle = req.params.postTitle;
@@ -279,7 +283,7 @@ app.get('/blog/:postTitle', async (req, res) => {
     }
 });
 
-// Start the server
+// Inicia el servidor
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
