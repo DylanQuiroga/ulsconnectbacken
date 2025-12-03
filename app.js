@@ -72,6 +72,29 @@ console.log('🔒 Security Config:', {
     }
 });
 
+// Middleware para forzar el atributo Partitioned en las cookies en producción
+if (isProduction) {
+    app.use((req, res, next) => {
+        const originalSetHeader = res.setHeader;
+        res.setHeader = function (name, value) {
+            if (name.toLowerCase() === 'set-cookie') {
+                if (Array.isArray(value)) {
+                    value = value.map(cookie => {
+                        if (!cookie.includes('Partitioned')) {
+                            return cookie + '; Partitioned';
+                        }
+                        return cookie;
+                    });
+                } else if (typeof value === 'string' && !value.includes('Partitioned')) {
+                    value = value + '; Partitioned';
+                }
+            }
+            return originalSetHeader.call(this, name, value);
+        };
+        next();
+    });
+}
+
 // Configuracion de sesion con store MongoDB (debe ir antes del middleware csrfToken)
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
@@ -88,8 +111,11 @@ const sessionConfig = {
 
 // Configura el store de sesion en MongoDB para evitar fallback a memoria
 try {
+    const mongoUrl = process.env.MONGO_URI || process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/ulsconnect';
+    console.log('Attempting to connect to MongoDB for session store...');
+    
     sessionConfig.store = MongoStore.create({
-        mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ulsconnect',
+        mongoUrl: mongoUrl,
         touchAfter: 24 * 3600 // actualizacion perezosa de sesion (24 horas)
     });
 } catch (err) {
