@@ -116,7 +116,7 @@ try {
     app.use('/', authRouter);
 } catch (err) {
     // Si el archivo de rutas no existe, ignora para que la app siga corriendo
-    console.warn('Auth routes not available:', err && err.message err.message : err);
+    console.warn('Auth routes not available:', err && err.message ? err.message : err);
 }
 
 // Monta rutas de registro (solicitudes de estudiantes y aprobaciones)
@@ -124,7 +124,7 @@ try {
     const registrationRouter = require(path.join(__dirname, 'routes', 'registrationRoutes'));
     app.use('/auth', registrationRouter);
 } catch (err) {
-    console.warn('Registration routes not available:', err && err.message err.message : err);
+    console.warn('Registration routes not available:', err && err.message ? err.message : err);
 }
 
 try {
@@ -140,7 +140,7 @@ try {
     const volunteerPanelRouter = require(path.join(__dirname, 'routes', 'volunteerPanelRoutes'));
     app.use('/volunteer', volunteerPanelRouter);
 } catch (err) {
-    console.warn('Volunteer panel routes not available:', err && err.message err.message : err);
+    console.warn('Volunteer panel routes not available:', err && err.message ? err.message : err);
 }
 
 // Monta rutas del panel de admin/coordinador
@@ -148,7 +148,7 @@ try {
     const adminPanelRouter = require(path.join(__dirname, 'routes', 'adminPanelRoutes'));
     app.use('/admin', adminPanelRouter);
 } catch (err) {
-    console.warn('Admin panel routes not available:', err && err.message err.message : err);
+    console.warn('Admin panel routes not available:', err && err.message ? err.message : err);
 }
 
 // Monta rutas de inscripcion
@@ -164,7 +164,7 @@ try {
     const attendanceRoutes = require(path.join(__dirname, 'routes', 'attendanceRoutes'));
     app.use('/attendance', attendanceRoutes);
 } catch (err) {
-    console.warn('Attendance routes not available:', err && err.message err.message : err);
+    console.warn('Attendance routes not available:', err && err.message ? err.message : err);
 }
 
 // Intenta conectar a la BD al inicio para ver errores temprano
@@ -173,7 +173,7 @@ db.connect().then(() => {
 }).catch(err => {
     console.warn('Warning: could not connect to MongoDB. Auth will fail without a DB.');
     // Registra el error para depuracion
-    console.warn(err && err.message err.message : err);
+    console.warn(err && err.message ? err.message : err);
 });
 
 // Obtiene entradas del blog
