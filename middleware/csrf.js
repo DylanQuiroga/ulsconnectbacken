@@ -24,7 +24,8 @@ function csrfToken(req, res, next) {
     httpOnly: false, // false para que JavaScript pueda leerla
     secure: process.env.NODE_ENV === 'production',
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    partitioned: process.env.NODE_ENV === 'production'
   });
 
   next();
