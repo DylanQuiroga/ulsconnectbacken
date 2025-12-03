@@ -58,6 +58,9 @@ app.use(express.urlencoded({ extended: true }));
 // Parseo de JSON para APIs
 app.use(express.json());
 
+// Confía en el proxy inverso (necesario para cookies seguras en producción/Leapcell)
+app.set('trust proxy', 1);
+
 // Configuracion de sesion con store MongoDB (debe ir antes del middleware csrfToken)
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
@@ -66,6 +69,7 @@ const sessionConfig = {
     cookie: {
         secure: process.env.NODE_ENV === 'production', // true en produccion (requiere HTTPS)
         httpOnly: true,
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' para cross-site en producción
         maxAge: 24 * 60 * 60 * 1000 // 24 horas
     }
 };
@@ -93,7 +97,7 @@ app.get('/csrf-token', (req, res) => {
     res.cookie('XSRF-TOKEN', token, {
         httpOnly: false, // Importante: false para que JS pueda leerla
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 24 horas
     });
 
