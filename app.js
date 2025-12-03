@@ -81,7 +81,8 @@ const sessionConfig = {
         secure: isProduction, // true en produccion (requiere HTTPS)
         httpOnly: true,
         sameSite: isProduction ? 'none' : 'lax', // 'none' para cross-site en producción
-        maxAge: 24 * 60 * 60 * 1000 // 24 horas
+        maxAge: 24 * 60 * 60 * 1000, // 24 horas
+        partitioned: isProduction // Atributo CHIPS para cookies de terceros
     }
 };
 
