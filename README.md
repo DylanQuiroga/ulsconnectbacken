@@ -74,7 +74,6 @@ El propósito de esta página es permitir a los administradores publicar, admini
 ## 📝Prerequisitos.
 - Git.
 - NodeJs.
-- Jest (Para pruebas).
 - MongoDB.
 
 ## ⬇️Instalación.
