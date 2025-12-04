@@ -5,7 +5,7 @@ const router = express.Router();
 
 const ensureAuth = require(path.join(__dirname, '..', 'middleware', 'ensureAuth'));
 const ensureRole = require(path.join(__dirname, '..', 'middleware', 'ensureRole'));
-const AttendanceModel = require(path.join(__dirname, '..', 'lib', 'AttendanceModel'));
+const AttendanceModel = require(path.join(__dirname, '..', 'lib', 'attendanceModel'));
 const Attendance = require(path.join(__dirname, '..', 'lib', 'schema', 'Attendance'));
 
 // Crea una lista de asistencia para la actividad indicada
@@ -53,7 +53,7 @@ router.post('/take', ensureAuth, ensureRole(['admin', 'staff']), async (req, res
 router.post('/update', ensureAuth, ensureRole(['admin', 'staff']), async (req, res) => {
   try {
     const attendanceId = req.body && (req.body.attendanceId);
-    const updates = Array.isArray(req.body.updates) ? req.body.updates : (req.body.updates ? JSON.parse(req.body.updates) : []);
+    const updates = Array.isArray(req.body.updates) ? req.body.updates : (req.body.updates ? JSON.parse(req.body.updates) : []);  
 
     if (!attendanceId) return res.status(400).json({ success: false, message: 'attendanceId requerido' });
     if (!Array.isArray(updates)) return res.status(400).json({ success: false, message: 'updates debe ser un array' });
